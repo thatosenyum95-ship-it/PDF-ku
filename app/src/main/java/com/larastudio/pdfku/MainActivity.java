@@ -1,6 +1,6 @@
 package com.larastudio.pdfku;
 
-import android.app.*;import android.os.*;import android.content.*;import android.graphics.*;import android.graphics.pdf.PdfRenderer;import android.net.Uri;import android.view.*;import android.widget.*;import java.io.*;import java.util.*;
+import android.app.*;import android.os.*;import android.content.*;import android.graphics.*;import android.graphics.pdf.PdfRenderer;import android.graphics.pdf.PdfDocument;import android.net.Uri;import android.view.*;import android.widget.*;import java.io.*;import java.util.*;
 
 public class MainActivity extends Activity{
  LinearLayout content; TextView status; ImageView image; PdfRenderer renderer; ParcelFileDescriptor fd; int page=0; final int PDF=1,IMG=2; ArrayList<Uri> recent=new ArrayList<>();
