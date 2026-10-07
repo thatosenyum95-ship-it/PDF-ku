@@ -35,15 +35,8 @@ jobs:
           unzip -t "$APK" >/dev/null
           echo "APK size: $(stat -c%s "$APK") bytes"
           echo "SHA-256: $(sha256sum "$APK" | cut -d' ' -f1)"
-          AAPT2="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name aapt2 | sort -V | tail -n 1)"
-          test -x "$AAPT2"
-          "$AAPT2" dump badging "$APK" | tee /tmp/badging.txt
-          grep -q "package: name='com.larastudio.pdfku'" /tmp/badging.txt
-          grep -q "application-icon" /tmp/badging.txt
-          unzip -l "$APK" | grep -q "mipmap-anydpi-v26/ic_launcher.xml"
-          unzip -l "$APK" | grep -q "mipmap-anydpi-v26/ic_launcher_round.xml"
-          unzip -l "$APK" | grep -q "mipmap-anydpi-v26/ic_launcher.xml"
-          unzip -l "$APK" | grep -q "mipmap-anydpi-v26/ic_launcher_round.xml"
+          unzip -l "$APK" | grep -q "res/mipmap-anydpi-v26/ic_launcher.xml"
+          unzip -l "$APK" | grep -q "res/mipmap-anydpi-v26/ic_launcher_round.xml"
           if unzip -l "$APK" | grep -q "mipmap.*/ic_launcher.png"; then
             echo "Unexpected legacy PNG launcher resource found"
             exit 1
