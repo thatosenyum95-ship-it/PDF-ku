@@ -42,7 +42,12 @@ jobs:
           grep -q "application-icon" /tmp/badging.txt
           unzip -l "$APK" | grep -q "mipmap-anydpi-v26/ic_launcher.xml"
           unzip -l "$APK" | grep -q "mipmap-anydpi-v26/ic_launcher_round.xml"
-          unzip -l "$APK" | grep -q "mipmap-xxxhdpi/ic_launcher.png"
+          unzip -l "$APK" | grep -q "mipmap-anydpi-v26/ic_launcher.xml"
+          unzip -l "$APK" | grep -q "mipmap-anydpi-v26/ic_launcher_round.xml"
+          if unzip -l "$APK" | grep -q "mipmap.*/ic_launcher.png"; then
+            echo "Unexpected legacy PNG launcher resource found"
+            exit 1
+          fi
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
