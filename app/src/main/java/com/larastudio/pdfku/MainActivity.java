@@ -1,6 +1,17 @@
 package com.larastudio.pdfku;
 
-import android.app.*;import android.os.*;import android.content.*;import android.graphics.*;import android.graphics.pdf.PdfRenderer;import android.graphics.pdf.PdfDocument;import android.net.Uri;import android.view.*;import android.widget.*;import java.io.*;import java.util.*;import androidx.core.content.FileProvider;
+import android.app.*;
+import android.os.*;
+import android.content.*;
+import android.graphics.*;
+import android.graphics.pdf.PdfRenderer;
+import android.graphics.pdf.PdfDocument;
+import android.net.Uri;
+import android.view.*;
+import android.widget.*;
+import java.io.*;
+import java.util.*;
+import androidx.core.content.FileProvider;
 
 public class MainActivity extends Activity{
  LinearLayout content; TextView status; ImageView image; PdfRenderer renderer; ParcelFileDescriptor fd; int page=0; final int PDF=1,IMG=2,MERGE=3; ArrayList<Uri> recent=new ArrayList<>();
@@ -25,7 +36,8 @@ public class MainActivity extends Activity{
  void pickMerge(){Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("application/pdf");i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);i.addCategory(Intent.CATEGORY_OPENABLE);startActivityForResult(i,MERGE);}
  void mergeSelected(Intent d){try{ArrayList<Uri> a=new ArrayList<>();if(d.getClipData()!=null)for(int i=0;i<d.getClipData().getItemCount();i++)a.add(d.getClipData().getItemAt(i).getUri());else if(d.getData()!=null)a.add(d.getData());if(a.size()<2){toast("Pilih minimal 2 PDF");return;}File f=new File(getExternalFilesDir(null),"PDF-ku-merge-"+System.currentTimeMillis()+".pdf");PdfDocument out=new PdfDocument();int no=1;for(Uri u:a){ParcelFileDescriptor pfd=getContentResolver().openFileDescriptor(u,"r");PdfRenderer rr=new PdfRenderer(pfd);for(int i=0;i<rr.getPageCount();i++){PdfRenderer.Page src=rr.openPage(i);int w=src.getWidth(),h=src.getHeight();PdfDocument.Page dst=out.startPage(new PdfDocument.PageInfo.Builder(w,h,no++).create());Bitmap bm=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);bm.eraseColor(Color.WHITE);src.render(bm,null,null,PdfRenderer.Page.RENDER_MODE_FOR_PRINT);dst.getCanvas().drawBitmap(bm,0,0,new Paint(1));out.finishPage(dst);bm.recycle();src.close();}rr.close();pfd.close();}FileOutputStream os=new FileOutputStream(f);out.writeTo(os);os.close();out.close();shareFile(f);}catch(Exception e){toast("Gagal menggabungkan PDF");}}
  void saveCurrentPage(){if(renderer==null)return;try{File f=new File(getExternalFilesDir(null),"PDF-ku-page-"+(page+1)+"-"+System.currentTimeMillis()+".pdf");PdfRenderer.Page src=renderer.openPage(page);PdfDocument out=new PdfDocument();PdfDocument.Page dst=out.startPage(new PdfDocument.PageInfo.Builder(src.getWidth(),src.getHeight(),1).create());Bitmap bm=Bitmap.createBitmap(src.getWidth(),src.getHeight(),Bitmap.Config.ARGB_8888);bm.eraseColor(Color.WHITE);src.render(bm,null,null,PdfRenderer.Page.RENDER_MODE_FOR_PRINT);dst.getCanvas().drawBitmap(bm,0,0,new Paint(1));out.finishPage(dst);src.close();bm.recycle();FileOutputStream os=new FileOutputStream(f);out.writeTo(os);os.close();out.close();shareFile(f);}catch(Exception e){toast("Gagal menyimpan halaman");}}
- void shareFile(File f){try{Intent i=new Intent(Intent.ACTION_SEND);i.setType("application/pdf");Uri u=FileProvider.getUriForFile(this,getPackageName()+".fileprovider",f);i.putExtra(Intent.EXTRA_STREAM,u);i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);startActivity(Intent.createChooser(i,"Bagikan PDF"));}catch(Exception e){toast("PDF dibuat: "+f.getName());}}\n void closePdf(){try{if(renderer!=null)renderer.close();}catch(Exception e){}try{if(fd!=null)fd.close();}catch(Exception e){}renderer=null;fd=null;}
+ void shareFile(File f){try{Intent i=new Intent(Intent.ACTION_SEND);i.setType("application/pdf");Uri u=FileProvider.getUriForFile(this,getPackageName()+".fileprovider",f);i.putExtra(Intent.EXTRA_STREAM,u);i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);startActivity(Intent.createChooser(i,"Bagikan PDF"));}catch(Exception e){toast("PDF dibuat: "+f.getName());}}
+ void closePdf(){try{if(renderer!=null)renderer.close();}catch(Exception e){}try{if(fd!=null)fd.close();}catch(Exception e){}renderer=null;fd=null;}
  void toast(String s){Toast.makeText(this,s,Toast.LENGTH_SHORT).show();}
  protected void onDestroy(){closePdf();super.onDestroy();}
 }
