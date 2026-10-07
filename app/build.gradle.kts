@@ -8,15 +8,18 @@ android {
         applicationId = "com.larastudio.pdfku"
         minSdk = 26
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
     }
 
     buildTypes {
         release { isMinifyEnabled = false }
     }
 
-    dependencies { implementation("androidx.core:core:1.17.0") }
+    dependencies {
+        implementation("androidx.core:core:1.17.0")
+        implementation("com.tom-roush:pdfbox-android:2.0.27.0")
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
