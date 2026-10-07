@@ -309,10 +309,12 @@ public class MainActivity extends Activity {
                 f = tempFile("images");
                 PdfDocument p = new PdfDocument();
                 int n = 1;
+                int validImages = 0;
 
                 for (Uri u : a) {
                     Bitmap b = BitmapFactory.decodeStream(getContentResolver().openInputStream(u));
                     if (b == null) continue;
+                    validImages++;
                     float s = Math.min(535f / b.getWidth(), 762f / b.getHeight());
                     int w = Math.max(1, (int) (b.getWidth() * s));
                     int h = Math.max(1, (int) (b.getHeight() * s));
@@ -322,6 +324,11 @@ public class MainActivity extends Activity {
                             new Paint(Paint.ANTI_ALIAS_FLAG));
                     p.finishPage(z);
                     b.recycle();
+                }
+
+                if (validImages == 0) {
+                    p.close();
+                    throw new IOException("Format gambar tidak didukung atau gambar rusak");
                 }
 
                 try (FileOutputStream o = new FileOutputStream(f)) {
