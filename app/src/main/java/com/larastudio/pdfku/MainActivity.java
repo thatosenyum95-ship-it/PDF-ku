@@ -136,8 +136,10 @@ public class MainActivity extends Activity {
             addRecent(u);
             open(u);
         } else if (r == REQ_IMG) {
+            persistReadPermissions(d);
             imagePdf(d);
         } else if (r == REQ_MERGE) {
+            persistReadPermissions(d);
             mergeSelected(d);
         } else if (r == REQ_SPLIT && d.getData() != null) {
             Uri u = d.getData();
@@ -164,7 +166,22 @@ public class MainActivity extends Activity {
     void persistWritePermission(Intent d, Uri u) {
         try {
             int flags = d.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
-            getContentResolver().takePersistableUriPermission(u, flags);
+            if (flags != 0) getContentResolver().takePersistableUriPermission(u, flags);
+        } catch (Exception ignored) {}
+    }
+
+    void persistReadPermissions(Intent d) {
+        try {
+            int flags = d.getFlags() & Intent.FLAG_GRANT_READ_URI_PERMISSION;
+            if (flags == 0) return;
+            if (d.getClipData() != null) {
+                for (int i = 0; i < d.getClipData().getItemCount(); i++) {
+                    Uri u = d.getClipData().getItemAt(i).getUri();
+                    try { getContentResolver().takePersistableUriPermission(u, flags); } catch (Exception ignored) {}
+                }
+            } else if (d.getData() != null) {
+                persistReadPermission(d, d.getData());
+            }
         } catch (Exception ignored) {}
     }
 
@@ -368,8 +385,7 @@ public class MainActivity extends Activity {
 
                 EditText range = new EditText(this);
                 range.setHint("Contoh: 2-5 atau 3");
-                range.setInputType(android.text.InputType.TYPE_CLASS_NUMBER |
-                        android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+                range.setInputType(android.text.InputType.TYPE_CLASS_TEXT);
                 box.addView(range);
 
                 TextView info = tx("Total halaman: " + finalCount, 14);
@@ -467,32 +483,43 @@ public class MainActivity extends Activity {
     }
 
     void saveCurrentPageAs() {
-        if (renderer == null) return;
+        if (openedUri == null || renderer == null) return;
+        final Uri sourceUri = openedUri;
+        final int pageIndex = page;
 
         worker.execute(() -> {
             File f = null;
             try {
                 f = tempFile("page");
-                PdfRenderer.Page src = renderer.openPage(page);
-                PdfDocument out = new PdfDocument();
-                PdfDocument.Page dst = out.startPage(new PdfDocument.PageInfo.Builder(src.getWidth(), src.getHeight(), 1).create());
+                try (ParcelFileDescriptor sourceFd = getContentResolver().openFileDescriptor(sourceUri, "r")) {
+                    if (sourceFd == null) throw new IOException("File descriptor null");
+                    PdfRenderer safeRenderer = new PdfRenderer(sourceFd);
+                    if (pageIndex < 0 || pageIndex >= safeRenderer.getPageCount()) {
+                        safeRenderer.close();
+                        throw new IOException("Halaman tidak tersedia");
+                    }
+                    PdfRenderer.Page src = safeRenderer.openPage(pageIndex);
+                    PdfDocument out = new PdfDocument();
+                    PdfDocument.Page dst = out.startPage(new PdfDocument.PageInfo.Builder(src.getWidth(), src.getHeight(), 1).create());
 
-                Bitmap bm = Bitmap.createBitmap(src.getWidth(), src.getHeight(), Bitmap.Config.ARGB_8888);
-                bm.eraseColor(Color.WHITE);
-                src.render(bm, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT);
-                dst.getCanvas().drawBitmap(bm, 0, 0, new Paint(Paint.ANTI_ALIAS_FLAG));
+                    Bitmap bm = Bitmap.createBitmap(src.getWidth(), src.getHeight(), Bitmap.Config.ARGB_8888);
+                    bm.eraseColor(Color.WHITE);
+                    src.render(bm, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT);
+                    dst.getCanvas().drawBitmap(bm, 0, 0, new Paint(Paint.ANTI_ALIAS_FLAG));
 
-                out.finishPage(dst);
-                src.close();
-                bm.recycle();
+                    out.finishPage(dst);
+                    src.close();
+                    safeRenderer.close();
+                    bm.recycle();
 
-                try (FileOutputStream os = new FileOutputStream(f)) {
-                    out.writeTo(os);
+                    try (FileOutputStream os = new FileOutputStream(f)) {
+                        out.writeTo(os);
+                    }
+                    out.close();
                 }
-                out.close();
 
                 File result = f;
-                runOnUiThread(() -> requestSaveAs(result, "PDF-ku-halaman-" + (page + 1) + ".pdf"));
+                runOnUiThread(() -> requestSaveAs(result, "PDF-ku-halaman-" + (pageIndex + 1) + ".pdf"));
             } catch (Exception e) {
                 if (f != null) f.delete();
                 runOnUiThread(() -> toast("Gagal menyimpan halaman: " + e.getMessage()));
