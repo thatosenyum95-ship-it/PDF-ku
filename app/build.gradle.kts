@@ -16,6 +16,8 @@ android {
         release { isMinifyEnabled = false }
     }
 
+    dependencies { implementation("androidx.core:core:1.17.0") }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
