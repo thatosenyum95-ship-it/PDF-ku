@@ -3,6 +3,7 @@ package com.larastudio.pdfku;
 import android.app.*;
 import android.os.*;
 import android.content.*;
+import android.database.Cursor;
 import android.graphics.*;
 import android.graphics.pdf.PdfRenderer;
 import android.graphics.pdf.PdfDocument;
