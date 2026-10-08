@@ -321,26 +321,68 @@ public class MainActivity extends Activity {
     }
 
     void viewer() {
-        shell("PDF Viewer");
+        shell("");
+
+        LinearLayout top = new LinearLayout(this);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+        top.setPadding(0, 0, 0, dp(10));
+
+        TextView title = tx("Dokumen", 21);
+        title.setTextColor(Color.WHITE);
+        title.setTypeface(Typeface.create("sans-serif", Typeface.BOLD));
+        top.addView(title, new LinearLayout.LayoutParams(0, dp(42), 1));
+
+        Button share = bt("↗");
+        share.setTextSize(18);
+        share.setGravity(Gravity.CENTER);
+        share.setBackground(bg(Color.rgb(30, 41, 59), 14));
+        top.addView(share, new LinearLayout.LayoutParams(dp(46), dp(46)));
+        content.addView(top);
+
+        LinearLayout canvas = new LinearLayout(this);
+        canvas.setGravity(Gravity.CENTER);
+        canvas.setPadding(dp(8), dp(8), dp(8), dp(8));
+        canvas.setBackground(bg(Color.rgb(226, 232, 240), 18));
 
         image = new ImageView(this);
         image.setAdjustViewBounds(true);
+        image.setScaleType(ImageView.ScaleType.FIT_CENTER);
         image.setBackgroundColor(Color.WHITE);
-        content.addView(image, new LinearLayout.LayoutParams(-1, 0, 1));
+        canvas.addView(image, new LinearLayout.LayoutParams(-1, -1));
+        LinearLayout.LayoutParams canvasParams = new LinearLayout.LayoutParams(-1, 0, 1);
+        canvasParams.setMargins(0, 0, 0, dp(12));
+        content.addView(canvas, canvasParams);
 
-        LinearLayout n = new LinearLayout(this);
-        Button p = bt("‹ Sebelumnya");
-        Button q = bt("Berikutnya ›");
-        Button save = bt("Simpan As");
-        Button share = bt("Bagikan");
+        LinearLayout pager = new LinearLayout(this);
+        pager.setGravity(Gravity.CENTER_VERTICAL);
+        pager.setPadding(dp(6), dp(6), dp(6), dp(6));
+        pager.setBackground(bg(Color.rgb(17, 28, 49), 18));
 
-        n.addView(p, new LinearLayout.LayoutParams(0, dp(56), 1));
-        n.addView(q, new LinearLayout.LayoutParams(0, dp(56), 1));
-        n.addView(save, new LinearLayout.LayoutParams(0, dp(56), 1));
-        n.addView(share, new LinearLayout.LayoutParams(0, dp(56), 1));
-        content.addView(n);
+        Button p = bt("‹");
+        Button q = bt("›");
+        Button save = bt("Simpan");
+        TextView pageLabel = tx("Halaman " + (page + 1), 13);
+        pageLabel.setGravity(Gravity.CENTER);
+        pageLabel.setTextColor(Color.rgb(203, 213, 225));
 
-        add("⌂  Beranda", v -> home());
+        for (Button b : new Button[]{p, q}) {
+            b.setTextSize(24);
+            b.setGravity(Gravity.CENTER);
+            b.setBackground(bg(Color.rgb(30, 41, 59), 14));
+        }
+        save.setBackground(bg(Color.rgb(37, 99, 235), 14));
+
+        pager.addView(p, new LinearLayout.LayoutParams(dp(50), dp(50)));
+        pager.addView(pageLabel, new LinearLayout.LayoutParams(0, dp(50), 1));
+        pager.addView(save, new LinearLayout.LayoutParams(dp(88), dp(50)));
+        pager.addView(q, new LinearLayout.LayoutParams(dp(50), dp(50)));
+        content.addView(pager);
+
+        Button homeButton = bt("←  Beranda");
+        homeButton.setBackground(bg(Color.rgb(15, 23, 42), 14));
+        LinearLayout.LayoutParams homeParams = new LinearLayout.LayoutParams(-1, dp(48));
+        homeParams.setMargins(0, dp(10), 0, 0);
+        content.addView(homeButton, homeParams);
 
         p.setOnClickListener(v -> {
             if (page > 0) { page--; render(); }
@@ -350,6 +392,7 @@ public class MainActivity extends Activity {
         });
         save.setOnClickListener(v -> saveCurrentPageAs());
         share.setOnClickListener(v -> shareUri(openedUri));
+        homeButton.setOnClickListener(v -> home());
         render();
     }
 
@@ -471,21 +514,20 @@ public class MainActivity extends Activity {
         intro.setTextColor(Color.rgb(148, 163, 184));
         content.addView(intro);
 
-        Button merge = action("🔗", "Gabung PDF", "Satukan beberapa file menjadi satu");
-        Button split = action("✂", "Split PDF", "Ambil rentang halaman tertentu");
-        for (Button b : new Button[]{merge, split}) {
-            b.setBackground(bg(Color.rgb(15, 23, 42), 18));
-            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(78));
-            p.setMargins(0, dp(8), 0, 0);
-            content.addView(b, p);
-        }
+        LinearLayout merge = actionCard("🔗", "Gabung PDF", "Satukan beberapa file menjadi satu", Color.rgb(37, 99, 235));
+        LinearLayout split = actionCard("✂", "Split PDF", "Ambil rentang halaman tertentu", Color.rgb(245, 158, 11));
+        LinearLayout.LayoutParams mp = new LinearLayout.LayoutParams(-1, dp(82));
+        mp.setMargins(0, dp(10), 0, 0);
+        content.addView(merge, mp);
+        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1, dp(82));
+        sp.setMargins(0, dp(10), 0, 0);
+        content.addView(split, sp);
         merge.setOnClickListener(v -> pickMerge());
         split.setOnClickListener(v -> pickSplit());
 
-        Button about = action("ⓘ", "Tentang PDF-ku", "Toolkit PDF offline-first dari Lara Studio");
-        about.setBackground(bg(Color.rgb(15, 23, 42), 18));
-        LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(-1, dp(72));
-        ap.setMargins(0, dp(22), 0, 0);
+        LinearLayout about = actionCard("ⓘ", "Tentang PDF-ku", "Toolkit PDF offline-first dari Lara Studio", Color.rgb(100, 116, 139));
+        LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(-1, dp(76));
+        ap.setMargins(0, dp(24), 0, 0);
         content.addView(about, ap);
         about.setOnClickListener(v -> new AlertDialog.Builder(this)
                 .setTitle("PDF-ku 1.1")
