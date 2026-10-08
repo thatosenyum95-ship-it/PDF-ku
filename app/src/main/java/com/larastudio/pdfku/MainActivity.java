@@ -614,9 +614,15 @@ public class MainActivity extends Activity {
                 final int idx=i;
                 LinearLayout row=new LinearLayout(this);
                 row.setGravity(Gravity.CENTER_VERTICAL);
+                row.setPadding(0, dp(2), 0, dp(2));
+
                 TextView name=tx((i+1)+". "+displayName(work.get(i)),14);
                 name.setTextColor(Color.rgb(51,65,85));
+                name.setSingleLine(false);
                 name.setMaxLines(2);
+                name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                name.setGravity(Gravity.CENTER_VERTICAL);
+
                 row.addView(name,new LinearLayout.LayoutParams(0,dp(52),1));
                 Button up=bt("↑"), down=bt("↓"), del=bt("×");
                 up.setEnabled(i>0); down.setEnabled(i<work.size()-1);
@@ -631,9 +637,26 @@ public class MainActivity extends Activity {
         };
         refresh[0].run();
 
-        final CheckBox gray=new CheckBox(this); gray.setText("Scan hitam-putih / grayscale"); gray.setTextColor(Color.rgb(51,65,85));
-        final CheckBox crop=new CheckBox(this); crop.setText("Auto-crop tepi dokumen"); crop.setTextColor(Color.rgb(51,65,85));
-        box.addView(gray); box.addView(crop);
+        final CheckBox gray=new CheckBox(this);
+        gray.setButtonTintList(android.content.res.ColorStateList.valueOf(Color.rgb(15,118,110)));
+        gray.setTextColor(Color.rgb(51,65,85));
+        gray.setText("Scan hitam-putih / grayscale");
+        gray.setTextSize(14);
+        gray.setMinHeight(dp(48));
+
+        final CheckBox crop=new CheckBox(this);
+        crop.setButtonTintList(android.content.res.ColorStateList.valueOf(Color.rgb(15,118,110)));
+        crop.setTextColor(Color.rgb(51,65,85));
+        crop.setText("Auto-crop tepi dokumen");
+        crop.setTextSize(14);
+        crop.setMinHeight(dp(48));
+
+        LinearLayout options = new LinearLayout(this);
+        options.setOrientation(LinearLayout.VERTICAL);
+        options.setPadding(0, dp(6), 0, 0);
+        options.addView(gray, new LinearLayout.LayoutParams(-1, dp(50)));
+        options.addView(crop, new LinearLayout.LayoutParams(-1, dp(50)));
+        box.addView(options);
 
         AlertDialog dlg=new AlertDialog.Builder(this).setTitle(scanMode?"Scan Dokumen":"JPG / Gambar → PDF")
                 .setView(box).setNegativeButton("Batal",null)
