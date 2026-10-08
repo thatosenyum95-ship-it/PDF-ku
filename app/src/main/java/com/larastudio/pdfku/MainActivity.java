@@ -731,7 +731,7 @@ public class MainActivity extends Activity {
           }).show();
     }
     void exportPdfJpg(Uri u,int selected){
-        worker.execute(()->{File dir=new File(getCacheDir(),"pdfku-jpg-"+System.nanoTime());try{AdvancedPdfTools.pdfToJpg(this,u,dir,85,selected<0,Math.max(0,selected));File zip=zipDirectory(dir,"PDF-ku-JPG.zip");runOnUiThread(()->requestShareFile(zip,"application/zip","PDF-ku-JPG.zip"));}catch(Exception e){runOnUiThread(()->toast("Gagal ekspor JPG: "+e.getMessage()));}});
+        worker.execute(()->{File dir=new File(getCacheDir(),"pdfku-jpg-"+System.nanoTime());try{AdvancedPdfTools.pdfToJpg(this,u,dir,85,selected<0,Math.max(0,selected));File zip=zipDirectory(dir);runOnUiThread(()->requestShareFile(zip,"application/zip","PDF-ku-JPG.zip"));}catch(Exception e){runOnUiThread(()->toast("Gagal ekspor JPG: "+e.getMessage()));}});
     }
     File zipDirectory(File dir) throws Exception{
         File zip=new File(getCacheDir(),"PDF-ku-JPG.zip");java.util.zip.ZipOutputStream z=new java.util.zip.ZipOutputStream(new FileOutputStream(zip));
