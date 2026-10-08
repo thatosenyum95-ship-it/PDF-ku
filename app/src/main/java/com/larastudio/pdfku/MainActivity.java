@@ -46,11 +46,105 @@ public class MainActivity extends Activity {
     private Runnable editingRefresh;
     private boolean editingScanMode;
     private boolean darkViewer = false;
+    private ZoomImageView zoomImage;
     private final ArrayList<Uri> recent = new ArrayList<>();
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
 
     private File pendingSaveFile;
     private String pendingSaveName;
+
+    static class ZoomImageView extends ImageView {
+        private final Matrix drawMatrix = new Matrix();
+        private final ScaleGestureDetector scaleDetector;
+        private float scale = 1f;
+        private float minScale = 1f;
+        private float lastX, lastY;
+        private boolean dragging;
+
+        ZoomImageView(Context context) {
+            super(context);
+            setScaleType(ScaleType.MATRIX);
+            scaleDetector = new ScaleGestureDetector(context, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                @Override public boolean onScale(ScaleGestureDetector d) {
+                    float next = scale * d.getScaleFactor();
+                    next = Math.max(minScale, Math.min(next, minScale * 5f));
+                    float factor = next / scale;
+                    drawMatrix.postScale(factor, factor, d.getFocusX(), d.getFocusY());
+                    scale = next;
+                    clamp();
+                    setImageMatrix(drawMatrix);
+                    return true;
+                }
+            });
+        }
+
+        void fitToView() {
+            Drawable d = getDrawable();
+            if (d == null || getWidth() <= 0 || getHeight() <= 0) return;
+            float sx = (float) getWidth() / d.getIntrinsicWidth();
+            float sy = (float) getHeight() / d.getIntrinsicHeight();
+            minScale = Math.min(sx, sy);
+            scale = minScale;
+            drawMatrix.reset();
+            float w = d.getIntrinsicWidth() * scale;
+            float h = d.getIntrinsicHeight() * scale;
+            drawMatrix.postTranslate((getWidth() - w) / 2f, (getHeight() - h) / 2f);
+            setImageMatrix(drawMatrix);
+        }
+
+        void resetZoom() { fitToView(); }
+
+        private void clamp() {
+            Drawable d = getDrawable();
+            if (d == null) return;
+            float w = d.getIntrinsicWidth() * scale;
+            float h = d.getIntrinsicHeight() * scale;
+            RectF r = new RectF(0, 0, w, h);
+            drawMatrix.mapRect(r);
+            float dx = 0, dy = 0;
+            if (w <= getWidth()) dx = getWidth() / 2f - (r.left + r.right) / 2f;
+            else {
+                if (r.left > 0) dx = -r.left;
+                if (r.right < getWidth()) dx = getWidth() - r.right;
+            }
+            if (h <= getHeight()) dy = getHeight() / 2f - (r.top + r.bottom) / 2f;
+            else {
+                if (r.top > 0) dy = -r.top;
+                if (r.bottom < getHeight()) dy = getHeight() - r.bottom;
+            }
+            drawMatrix.postTranslate(dx, dy);
+        }
+
+        @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+            super.onSizeChanged(w, h, oldw, oldh);
+            post(this::fitToView);
+        }
+
+        @Override public boolean onTouchEvent(android.view.MotionEvent event) {
+            scaleDetector.onTouchEvent(event);
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    lastX = event.getX(); lastY = event.getY(); dragging = true;
+                    getParent().requestDisallowInterceptTouchEvent(true);
+                    return true;
+                case MotionEvent.ACTION_MOVE:
+                    if (dragging && !scaleDetector.isInProgress()) {
+                        float dx = event.getX() - lastX, dy = event.getY() - lastY;
+                        drawMatrix.postTranslate(dx, dy);
+                        clamp();
+                        setImageMatrix(drawMatrix);
+                        lastX = event.getX(); lastY = event.getY();
+                    }
+                    return true;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    dragging = false;
+                    getParent().requestDisallowInterceptTouchEvent(false);
+                    return true;
+            }
+            return true;
+        }
+    }
 
     int dp(int x) {
         return (int) (x * getResources().getDisplayMetrics().density + .5f);
@@ -632,10 +726,10 @@ public class MainActivity extends Activity {
         canvas.setPadding(dp(8), dp(8), dp(8), dp(8));
         canvas.setBackground(bg(Color.rgb(226, 232, 240), 18));
 
-        image = new ImageView(this);
-        image.setAdjustViewBounds(true);
-        image.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        zoomImage = new ZoomImageView(this);
+        image = zoomImage;
         image.setBackgroundColor(Color.WHITE);
+        image.setContentDescription("Halaman PDF");
         canvas.addView(image, new LinearLayout.LayoutParams(-1, -1));
         LinearLayout.LayoutParams canvasParams = new LinearLayout.LayoutParams(-1, 0, 1);
         canvasParams.setMargins(0, 0, 0, dp(12));
@@ -685,12 +779,29 @@ public class MainActivity extends Activity {
     }
 
     void render() {
+        if (renderer == null || zoomImage == null) return;
+        zoomImage.post(() -> renderPageForViewer()); 
+    }
+
+    void renderPageForViewer() {
+        if (renderer == null || zoomImage == null || zoomImage.getWidth() <= 0 || zoomImage.getHeight() <= 0) {
+            return;
+        }
         try {
-            if (renderer == null) return;
             PdfRenderer.Page p = renderer.openPage(page);
-            Bitmap b = Bitmap.createBitmap(p.getWidth() * 2, p.getHeight() * 2, Bitmap.Config.ARGB_8888);
+            float fit = Math.min(
+                    (float) zoomImage.getWidth() / p.getWidth(),
+                    (float) zoomImage.getHeight() / p.getHeight()
+            );
+            fit = Math.max(0.1f, fit);
+            int maxW = 2400;
+            int maxH = 3200;
+            int w = Math.max(1, Math.min(maxW, Math.round(p.getWidth() * fit * 2f)));
+            int h = Math.max(1, Math.min(maxH, Math.round(p.getHeight() * fit * 2f)));
+            Bitmap b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
             b.eraseColor(Color.WHITE);
-            p.render(b, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
+            Rect dest = new Rect(0, 0, w, h);
+            p.render(b, dest, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
             p.close();
             if (darkViewer) {
                 Paint inv = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -700,8 +811,9 @@ public class MainActivity extends Activity {
                 new Canvas(dark).drawBitmap(b,0,0,inv); b.recycle(); b=dark;
             }
             image.setImageBitmap(b);
+            zoomImage.post(zoomImage::fitToView);
             status.setText("Halaman " + (page + 1) + " / " + renderer.getPageCount() + (darkViewer ? "  •  Dark" : ""));
-        } catch (Exception e) { toast("Gagal menampilkan halaman"); }
+        } catch (Exception e) { toast("Gagal menampilkan halaman: " + e.getMessage()); }
     }
 
     void textPdf() {
