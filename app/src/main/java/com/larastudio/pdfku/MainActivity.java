@@ -618,14 +618,19 @@ public class MainActivity extends Activity {
                 row.setPadding(0, dp(2), 0, dp(2));
                 row.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(56)));
 
-                TextView name=tx((i+1)+". "+displayName(work.get(i)),14);
-                name.setTextColor(Color.rgb(51,65,85));
+                TextView name = new TextView(this);
+                String display = displayName(work.get(i));
+                if (display == null || display.trim().isEmpty()) display = "Gambar " + (i + 1);
+                name.setText((i + 1) + ". " + display);
+                name.setTextColor(Color.rgb(15, 23, 42));
+                name.setTextSize(14);
+                name.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
+                name.setGravity(Gravity.CENTER_VERTICAL);
                 name.setSingleLine(false);
                 name.setMaxLines(2);
                 name.setEllipsize(android.text.TextUtils.TruncateAt.END);
-                name.setGravity(Gravity.CENTER_VERTICAL);
-
-                row.addView(name,new LinearLayout.LayoutParams(0,dp(52),1));
+                name.setVisibility(View.VISIBLE);
+                row.addView(name, new LinearLayout.LayoutParams(0, dp(52), 1));
                 Button up=bt("↑"), down=bt("↓"), del=bt("×");
                 up.setEnabled(i>0); down.setEnabled(i<work.size()-1);
                 row.addView(up,new LinearLayout.LayoutParams(dp(44),dp(44)));
@@ -641,16 +646,20 @@ public class MainActivity extends Activity {
 
         final CheckBox gray=new CheckBox(this);
         gray.setButtonTintList(android.content.res.ColorStateList.valueOf(Color.rgb(15,118,110)));
-        gray.setTextColor(Color.rgb(51,65,85));
         gray.setText("Scan hitam-putih / grayscale");
+        gray.setTextColor(Color.rgb(15,23,42));
         gray.setTextSize(14);
+        gray.setAlpha(1f);
+        gray.setVisibility(View.VISIBLE);
         gray.setMinHeight(dp(48));
 
         final CheckBox crop=new CheckBox(this);
         crop.setButtonTintList(android.content.res.ColorStateList.valueOf(Color.rgb(15,118,110)));
-        crop.setTextColor(Color.rgb(51,65,85));
         crop.setText("Auto-crop tepi dokumen");
+        crop.setTextColor(Color.rgb(15,23,42));
         crop.setTextSize(14);
+        crop.setAlpha(1f);
+        crop.setVisibility(View.VISIBLE);
         crop.setMinHeight(dp(48));
 
         LinearLayout options = new LinearLayout(this);
