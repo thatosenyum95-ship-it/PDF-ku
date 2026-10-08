@@ -296,7 +296,7 @@ public class MainActivity extends Activity {
             i.putExtra(android.provider.MediaStore.EXTRA_OUTPUT, cameraOutputUri);
             i.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
 
-            List<ResolveInfo> cameras = getPackageManager().queryIntentActivities(
+            List<android.content.pm.ResolveInfo> cameras = getPackageManager().queryIntentActivities(
                     i, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY
             );
             if (cameras.isEmpty()) {
