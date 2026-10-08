@@ -790,13 +790,13 @@ public class MainActivity extends Activity {
                         row.addView(del,new LinearLayout.LayoutParams(dp(42),dp(42)));
                         list.addView(row);
                         up.setOnClickListener(v->{Collections.swap(order,p,p-1);refresh[0].run();});
-                        down.setOnClickListener(v->{Collections.swap(order,p,p+1);refresh.run();});
+                        down.setOnClickListener(v->{Collections.swap(order,p,p+1);refresh[0].run();});
                         rot.setOnClickListener(v->{rotations.put(original,(rotations.containsKey(original)?rotations.get(original):0)+90);toast("Halaman diputar 90°");});
-                        del.setOnClickListener(v->{order.remove(p);refresh.run();});
+                        del.setOnClickListener(v->{order.remove(p);refresh[0].run();});
                     }
                 };
                 runOnUiThread(()->{
-                    refresh.run();
+                    refresh[0].run();
                     new AlertDialog.Builder(this).setTitle("Atur Halaman").setMessage("Geser ↑↓, putar ↻, atau hapus ×.")
                         .setView(box).setNegativeButton("Batal",null).setPositiveButton("Simpan",(d,w)->{
                             if(order.isEmpty()){toast("PDF tidak boleh kosong");return;}
