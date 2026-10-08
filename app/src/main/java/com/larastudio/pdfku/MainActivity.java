@@ -5,6 +5,7 @@ import android.os.*;
 import android.content.*;
 import android.database.Cursor;
 import android.graphics.*;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.media.ExifInterface;
 import android.graphics.pdf.PdfRenderer;
