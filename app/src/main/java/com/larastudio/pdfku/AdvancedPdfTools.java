@@ -2,6 +2,7 @@ package com.larastudio.pdfku;
 
 import android.content.Context;
 import android.graphics.*;
+import android.graphics.pdf.PdfDocument;
 import android.media.ExifInterface;
 import android.net.Uri;
 import android.os.Environment;
