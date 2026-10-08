@@ -337,7 +337,7 @@ public class MainActivity extends Activity {
     protected void onActivityResult(int r, int c, Intent d) {
         super.onActivityResult(r, c, d);
         if (c != RESULT_OK) {
-            if (r == REQ_CAMERA || r == REQ_SCAN) {
+            if (r == REQ_CAMERA || r == REQ_SCAN || r == REQ_CAMERA_ADD) {
                 if (cameraOutputFile != null) cameraOutputFile.delete();
                 cameraOutputUri = null;
                 cameraOutputFile = null;
