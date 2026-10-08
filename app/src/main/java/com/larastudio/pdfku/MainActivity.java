@@ -339,9 +339,7 @@ public class MainActivity extends Activity {
                 cameraOutputUri = null;
                 cameraOutputFile = null;
             } else if (r == REQ_SAVE_AS && pendingSaveFile != null) {
-                pendingSaveFile.delete();
-                pendingSaveFile = null;
-                pendingSaveName = null;
+                clearPendingSave(true);
             }
             return;
         }
@@ -1265,6 +1263,13 @@ public class MainActivity extends Activity {
                 runOnUiThread(() -> toast("Gagal menyimpan PDF: " + e.getMessage()));
             }
         });
+    }
+
+    void clearPendingSave(boolean deleteFile) {
+        File f = pendingSaveFile;
+        pendingSaveFile = null;
+        pendingSaveName = null;
+        if (deleteFile && f != null) f.delete();
     }
 
     void shareUri(Uri u) {
