@@ -615,7 +615,8 @@ public class MainActivity extends Activity {
                 LinearLayout row=new LinearLayout(this);
                 row.setGravity(Gravity.CENTER_VERTICAL);
                 TextView name=tx((i+1)+". "+displayName(work.get(i)),14);
-                name.setTextColor(Color.WHITE);
+                name.setTextColor(Color.rgb(51,65,85));
+                name.setMaxLines(2);
                 row.addView(name,new LinearLayout.LayoutParams(0,dp(52),1));
                 Button up=bt("↑"), down=bt("↓"), del=bt("×");
                 up.setEnabled(i>0); down.setEnabled(i<work.size()-1);
@@ -630,8 +631,8 @@ public class MainActivity extends Activity {
         };
         refresh[0].run();
 
-        final CheckBox gray=new CheckBox(this); gray.setText("Scan hitam-putih / grayscale"); gray.setTextColor(Color.WHITE);
-        final CheckBox crop=new CheckBox(this); crop.setText("Auto-crop tepi dokumen"); crop.setTextColor(Color.WHITE);
+        final CheckBox gray=new CheckBox(this); gray.setText("Scan hitam-putih / grayscale"); gray.setTextColor(Color.rgb(51,65,85));
+        final CheckBox crop=new CheckBox(this); crop.setText("Auto-crop tepi dokumen"); crop.setTextColor(Color.rgb(51,65,85));
         box.addView(gray); box.addView(crop);
 
         AlertDialog dlg=new AlertDialog.Builder(this).setTitle(scanMode?"Scan Dokumen":"JPG / Gambar → PDF")
@@ -693,6 +694,7 @@ public class MainActivity extends Activity {
     void captureScanPage(){
         try{
             File photo=File.createTempFile("pdfku-scan-",".jpg",getCacheDir());
+            cameraOutputFile=photo;
             cameraOutputUri=FileProvider.getUriForFile(this,getPackageName()+".fileprovider",photo);
             Intent i=new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
             i.putExtra(android.provider.MediaStore.EXTRA_OUTPUT,cameraOutputUri);
