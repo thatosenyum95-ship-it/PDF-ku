@@ -222,6 +222,13 @@ public class MainActivity extends Activity {
         image.setOnClickListener(v -> pickImg());
         text.setOnClickListener(v -> textPdf());
 
+        content.addView(section("SCAN & KONVERSI"));
+        LinearLayout scan=actionCard("📷","Scan Dokumen","Kamera + auto-crop + enhancement",Color.rgb(14,165,233));
+        LinearLayout pdfjpg=actionCard("🖼","PDF → JPG","Ekspor halaman sebagai gambar",Color.rgb(168,85,247));
+        cardRow(scan,pdfjpg);
+        scan.setOnClickListener(v->startScan());
+        pdfjpg.setOnClickListener(v->pickPdfToJpg());
+
         content.addView(section("KELOLA"));
         LinearLayout tools = actionCard("🧰", "PDF Tools", "Gabung & split", Color.rgb(245, 158, 11));
         LinearLayout files = actionCard("🕘", "Terakhir", "Dokumen terbaru", Color.rgb(236, 72, 153));
@@ -351,6 +358,9 @@ public class MainActivity extends Activity {
             Uri u = d.getData();
             persistReadPermission(d, u);
             showSplitDialog(u);
+        } else if (r >= REQ_SPLIT + 20 && r <= REQ_SPLIT + 24 && d.getData() != null) {
+            persistReadPermission(d, d.getData());
+            handleAdvancedResult(r, d.getData());
         } else if (r == REQ_SAVE_AS && pendingSaveFile != null) {
             Uri target = d.getData();
             persistWritePermission(d, target);
@@ -489,11 +499,16 @@ public class MainActivity extends Activity {
             b.eraseColor(Color.WHITE);
             p.render(b, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
             p.close();
+            if (darkViewer) {
+                Paint inv = new Paint(Paint.ANTI_ALIAS_FLAG);
+                ColorMatrix cm = new ColorMatrix(new float[]{-1,0,0,0,255, 0,-1,0,0,255, 0,0,-1,0,255, 0,0,0,1,0});
+                inv.setColorFilter(new ColorMatrixColorFilter(cm));
+                Bitmap dark=Bitmap.createBitmap(b.getWidth(),b.getHeight(),Bitmap.Config.ARGB_8888);
+                new Canvas(dark).drawBitmap(b,0,0,inv); b.recycle(); b=dark;
+            }
             image.setImageBitmap(b);
-            status.setText("Halaman " + (page + 1) + " / " + renderer.getPageCount());
-        } catch (Exception e) {
-            toast("Gagal menampilkan halaman");
-        }
+            status.setText("Halaman " + (page + 1) + " / " + renderer.getPageCount() + (darkViewer ? "  •  Dark" : ""));
+        } catch (Exception e) { toast("Gagal menampilkan halaman"); }
     }
 
     void textPdf() {
@@ -700,8 +715,9 @@ public class MainActivity extends Activity {
 
     void showCompressDialog(Uri u){
         final String[] q={"Kecil • 55%","Seimbang • 70%","Kualitas • 82%"};
-        new AlertDialog.Builder(this).setTitle("Kompres PDF").setSingleChoiceItems(q,1,(d,w)->{})
-          .setNegativeButton("Batal",null).setPositiveButton("Kompres",(d,w)->compressPdf(u,1)).show();
+        final int[] selected={1};
+        new AlertDialog.Builder(this).setTitle("Kompres PDF").setSingleChoiceItems(q,1,(d,w)->selected[0]=w)
+          .setNegativeButton("Batal",null).setPositiveButton("Kompres",(d,w)->compressPdf(u,selected[0])).show();
     }
     void compressPdf(Uri u,int preset){
         worker.execute(()->{File f=null;try{f=tempFile("compressed");AdvancedPdfTools.compressPdf(this,u,f,preset==0?55:preset==1?70:82,1);File r=f;runOnUiThread(()->requestSaveAs(r,"PDF-ku-compressed.pdf"));}catch(Exception e){if(f!=null)f.delete();runOnUiThread(()->toast("Gagal kompres: "+e.getMessage()));}});
@@ -752,16 +768,43 @@ public class MainActivity extends Activity {
     }
 
     void showPageManager(Uri u){
-        worker.execute(()->{try{int n;try(InputStream in=getContentResolver().openInputStream(u);PDDocument d=PDDocument.load(in)){n=d.getNumberOfPages();}
-            ArrayList<String> pages=new ArrayList<>();for(int i=0;i<n;i++)pages.add("Halaman "+(i+1));
-            boolean[] checked=new boolean[n];
-            runOnUiThread(()->new AlertDialog.Builder(this).setTitle("Atur Halaman")
-                .setMultiChoiceItems(pages.toArray(new String[0]),checked,(d,w,c)->checked[w]=c)
-                .setMessage("Centang halaman yang ingin dihapus. Untuk reorder/rotate, gunakan fitur dasar ini lalu pilih proses berikutnya.")
-                .setNegativeButton("Batal",null).setPositiveButton("Simpan",(d,w)->{
-                    ArrayList<Integer> order=new ArrayList<>();Set<Integer> del=new HashSet<>();for(int i=0;i<n;i++){order.add(i);if(checked[i])del.add(i);}
-                    worker.execute(()->{File f=null;try{f=tempFile("pages");AdvancedPdfTools.reorderPages(this,u,f,order,del,new HashMap<>());File r=f;runOnUiThread(()->requestSaveAs(r,"PDF-ku-pages.pdf"));}catch(Exception e){if(f!=null)f.delete();runOnUiThread(()->toast("Gagal mengatur halaman: "+e.getMessage()));}});}).show());
-        }catch(Exception e){runOnUiThread(()->toast("Gagal membaca PDF"));}});
+        worker.execute(()->{
+            try{
+                int n; try(InputStream in=getContentResolver().openInputStream(u); PDDocument d=PDDocument.load(in)){n=d.getNumberOfPages();}
+                ArrayList<Integer> order=new ArrayList<>(); for(int i=0;i<n;i++) order.add(i);
+                Map<Integer,Integer> rotations=new HashMap<>();
+                LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setPadding(dp(16),dp(4),dp(16),0);
+                LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL); box.addView(list);
+                Runnable refresh=()->{
+                    list.removeAllViews();
+                    for(int pos=0;pos<order.size();pos++){
+                        final int p=pos, original=order.get(pos);
+                        LinearLayout row=new LinearLayout(this); row.setGravity(Gravity.CENTER_VERTICAL);
+                        TextView name=tx("Halaman "+(original+1)+"  →  posisi "+(pos+1),14); name.setTextColor(Color.WHITE);
+                        row.addView(name,new LinearLayout.LayoutParams(0,dp(52),1));
+                        Button up=bt("↑"),down=bt("↓"),rot=bt("↻"),del=bt("×");
+                        up.setEnabled(pos>0);down.setEnabled(pos<order.size()-1);
+                        row.addView(up,new LinearLayout.LayoutParams(dp(42),dp(42)));
+                        row.addView(down,new LinearLayout.LayoutParams(dp(42),dp(42)));
+                        row.addView(rot,new LinearLayout.LayoutParams(dp(42),dp(42)));
+                        row.addView(del,new LinearLayout.LayoutParams(dp(42),dp(42)));
+                        list.addView(row);
+                        up.setOnClickListener(v->{Collections.swap(order,p,p-1);refresh.run();});
+                        down.setOnClickListener(v->{Collections.swap(order,p,p+1);refresh.run();});
+                        rot.setOnClickListener(v->{rotations.put(original,(rotations.containsKey(original)?rotations.get(original):0)+90);toast("Halaman diputar 90°");});
+                        del.setOnClickListener(v->{order.remove(p);refresh.run();});
+                    }
+                };
+                runOnUiThread(()->{
+                    refresh.run();
+                    new AlertDialog.Builder(this).setTitle("Atur Halaman").setMessage("Geser ↑↓, putar ↻, atau hapus ×.")
+                        .setView(box).setNegativeButton("Batal",null).setPositiveButton("Simpan",(d,w)->{
+                            if(order.isEmpty()){toast("PDF tidak boleh kosong");return;}
+                            worker.execute(()->{File f=null;try{f=tempFile("pages");AdvancedPdfTools.reorderPages(this,u,f,order,new HashSet<>(),rotations);File r=f;runOnUiThread(()->requestSaveAs(r,"PDF-ku-pages.pdf"));}catch(Exception e){if(f!=null)f.delete();runOnUiThread(()->toast("Gagal mengatur halaman: "+e.getMessage()));}});
+                        }).show();
+                });
+            }catch(Exception e){runOnUiThread(()->toast("Gagal membaca PDF: "+e.getMessage()));}
+        });
     }
 
     void toggleDarkViewer(){darkViewer=!darkViewer;getSharedPreferences(PREFS,MODE_PRIVATE).edit().putBoolean("dark_viewer",darkViewer).apply();toast(darkViewer?"Dark viewer aktif":"Dark viewer nonaktif");if(renderer!=null)viewer();else tools();}
