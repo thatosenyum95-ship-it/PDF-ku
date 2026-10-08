@@ -1260,6 +1260,7 @@ public class MainActivity extends Activity {
                         .setNegativeButton("Tutup", null)
                         .show());
             } catch (Exception e) {
+                source.delete();
                 runOnUiThread(() -> toast("Gagal menyimpan PDF: " + e.getMessage()));
             }
         });
