@@ -76,11 +76,64 @@ public class MainActivity extends Activity {
         return b;
     }
 
-    Button action(String icon, String title, String subtitle) {
-        Button b = bt(icon + "  " + title + "\n" + subtitle);
-        b.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
-        b.setTextSize(15);
-        return b;
+    LinearLayout actionCard(String icon, String title, String subtitle, int accent) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setPadding(dp(16), dp(14), dp(14), dp(14));
+        card.setBackground(bg(Color.rgb(17, 28, 49), 20));
+        card.setClickable(true);
+        card.setFocusable(true);
+
+        TextView iconView = new TextView(this);
+        iconView.setText(icon);
+        iconView.setTextSize(24);
+        iconView.setGravity(Gravity.CENTER);
+        iconView.setTextColor(Color.WHITE);
+        iconView.setBackground(bg(accent, 15));
+        card.addView(iconView, new LinearLayout.LayoutParams(dp(52), dp(52)));
+
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setPadding(dp(14), 0, dp(4), 0);
+
+        TextView titleView = tx(title, 16);
+        titleView.setTextColor(Color.WHITE);
+        titleView.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        titleView.setPadding(0, 0, 0, dp(3));
+        copy.addView(titleView);
+
+        TextView subView = tx(subtitle, 12);
+        subView.setTextColor(Color.rgb(148, 163, 184));
+        subView.setPadding(0, 0, 0, 0);
+        copy.addView(subView);
+
+        card.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
+        return card;
+    }
+
+    TextView section(String s) {
+        TextView t = tx(s, 11);
+        t.setTextColor(Color.rgb(96, 165, 250));
+        t.setTypeface(Typeface.DEFAULT_BOLD);
+        t.setLetterSpacing(.12f);
+        t.setPadding(2, dp(20), 2, dp(9));
+        return t;
+    }
+
+    void cardRow(LinearLayout a, LinearLayout b) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-1, dp(104));
+        rp.setMargins(0, 0, 0, dp(10));
+        content.addView(row, rp);
+        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(0, -1, 1);
+        cp.setMargins(0, 0, dp(5), 0);
+        row.addView(a, cp);
+        LinearLayout.LayoutParams cp2 = new LinearLayout.LayoutParams(0, -1, 1);
+        cp2.setMargins(dp(5), 0, 0, 0);
+        row.addView(b, cp2);
     }
 
     @Override
@@ -92,9 +145,12 @@ public class MainActivity extends Activity {
     }
 
     void shell(String h) {
+        getWindow().setStatusBarColor(Color.rgb(8, 15, 29));
+        getWindow().setNavigationBarColor(Color.rgb(8, 15, 29));
+
         LinearLayout r = new LinearLayout(this);
         r.setOrientation(LinearLayout.VERTICAL);
-        r.setPadding(dp(20), dp(18), dp(20), dp(12));
+        r.setPadding(dp(20), dp(14), dp(20), dp(10));
         r.setBackgroundColor(Color.rgb(8, 15, 29));
 
         TextView t = tx(h, 27);
@@ -127,46 +183,50 @@ public class MainActivity extends Activity {
 
     void home() {
         closePdf();
-        shell("PDF-ku");
-        TextView intro = tx("Baca, buat, kelola, dan bagikan PDF dengan cepat.", 15);
-        intro.setTextColor(Color.rgb(148, 163, 184));
-        content.addView(intro);
+        shell("");
 
-        TextView label = tx("AKSI CEPAT", 11);
-        label.setTextColor(Color.rgb(96, 165, 250));
-        label.setTypeface(Typeface.DEFAULT_BOLD);
-        label.setPadding(0, dp(24), 0, dp(8));
-        content.addView(label);
+        LinearLayout brand = new LinearLayout(this);
+        brand.setOrientation(LinearLayout.VERTICAL);
+        brand.setPadding(0, dp(4), 0, dp(2));
 
-        Button open = action("📄", "Buka PDF", "Baca dokumen dari perangkat");
-        Button image = action("🖼", "Gambar → PDF", "Gabungkan foto menjadi dokumen");
-        Button text = action("✍", "Teks → PDF", "Buat PDF sederhana dari teks");
-        for (Button b : new Button[]{open, image, text}) {
-            b.setBackground(bg(Color.rgb(15, 23, 42), 18));
-            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(78));
-            p.setMargins(0, 0, 0, dp(10));
-            content.addView(b, p);
-        }
-        open.setOnClickListener(v -> pickPdf());
+        TextView logo = tx("PDF-ku", 34);
+        logo.setTextColor(Color.WHITE);
+        logo.setTypeface(Typeface.create("sans-serif", Typeface.BOLD));
+        logo.setPadding(0, 0, 0, dp(3));
+        brand.addView(logo);
+
+        TextView tagline = tx("Semua urusan PDF, lebih simpel.", 14);
+        tagline.setTextColor(Color.rgb(148, 163, 184));
+        tagline.setPadding(0, 0, 0, 0);
+        brand.addView(tagline);
+        content.addView(brand);
+
+        LinearLayout hero = actionCard("📄", "Buka PDF", "Baca dokumen dari perangkat", Color.rgb(37, 99, 235));
+        hero.setBackground(bg(Color.rgb(20, 55, 110), 22));
+        LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(-1, dp(88));
+        hp.setMargins(0, dp(22), 0, 0);
+        content.addView(hero, hp);
+        hero.setOnClickListener(v -> pickPdf());
+
+        content.addView(section("BUAT PDF"));
+        LinearLayout image = actionCard("🖼", "Gambar", "Foto → PDF", Color.rgb(16, 185, 129));
+        LinearLayout text = actionCard("✍", "Teks", "Teks → PDF", Color.rgb(168, 85, 247));
+        cardRow(image, text);
         image.setOnClickListener(v -> pickImg());
         text.setOnClickListener(v -> textPdf());
 
-        TextView toolsLabel = tx("ALAT PDF", 11);
-        toolsLabel.setTextColor(Color.rgb(96, 165, 250));
-        toolsLabel.setTypeface(Typeface.DEFAULT_BOLD);
-        toolsLabel.setPadding(0, dp(18), 0, dp(8));
-        content.addView(toolsLabel);
-
-        Button tools = action("🧰", "PDF Tools", "Merge, split, dan utilitas lainnya");
-        Button files = action("🕘", "File Terakhir", "Lanjutkan dokumen yang baru dibuka");
-        for (Button b : new Button[]{tools, files}) {
-            b.setBackground(bg(Color.rgb(15, 23, 42), 18));
-            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(72));
-            p.setMargins(0, 0, 0, dp(10));
-            content.addView(b, p);
-        }
+        content.addView(section("KELOLA"));
+        LinearLayout tools = actionCard("🧰", "PDF Tools", "Gabung & split", Color.rgb(245, 158, 11));
+        LinearLayout files = actionCard("🕘", "Terakhir", "Dokumen terbaru", Color.rgb(236, 72, 153));
+        cardRow(tools, files);
         tools.setOnClickListener(v -> tools());
         files.setOnClickListener(v -> recent());
+
+        TextView hint = tx("🔒  Offline-first • File tetap di perangkat", 12);
+        hint.setTextColor(Color.rgb(100, 116, 139));
+        hint.setGravity(Gravity.CENTER);
+        hint.setPadding(0, dp(12), 0, dp(10));
+        content.addView(hint);
     }
 
     void pickPdf() {
