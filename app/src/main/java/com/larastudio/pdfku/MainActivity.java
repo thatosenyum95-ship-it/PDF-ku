@@ -40,6 +40,7 @@ public class MainActivity extends Activity {
     private int page = 0;
     private Uri openedUri;
     private Uri cameraOutputUri;
+    private File cameraOutputFile;
     private final ArrayList<Uri> scanUris = new ArrayList<>();
     private boolean darkViewer = false;
     private final ArrayList<Uri> recent = new ArrayList<>();
@@ -298,6 +299,7 @@ public class MainActivity extends Activity {
     void captureImage() {
         try {
             File photo = File.createTempFile("pdfku-camera-", ".jpg", getCacheDir());
+            cameraOutputFile = photo;
             cameraOutputUri = FileProvider.getUriForFile(
                     this,
                     getPackageName() + ".fileprovider",
@@ -313,6 +315,7 @@ public class MainActivity extends Activity {
             );
             if (cameras.isEmpty()) {
                 cameraOutputUri = null;
+                cameraOutputFile = null;
                 photo.delete();
                 toast("Aplikasi kamera tidak tersedia");
                 return;
@@ -320,7 +323,9 @@ public class MainActivity extends Activity {
 
             startActivityForResult(i, REQ_CAMERA);
         } catch (Exception e) {
+            if (cameraOutputFile != null) cameraOutputFile.delete();
             cameraOutputUri = null;
+            cameraOutputFile = null;
             toast("Tidak bisa membuka kamera");
         }
     }
@@ -328,7 +333,41 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int r, int c, Intent d) {
         super.onActivityResult(r, c, d);
-        if (c != RESULT_OK || d == null) return;
+        if (c != RESULT_OK) {
+            if (r == REQ_CAMERA || r == REQ_SCAN) {
+                if (cameraOutputFile != null) cameraOutputFile.delete();
+                cameraOutputUri = null;
+                cameraOutputFile = null;
+            } else if (r == REQ_SAVE_AS && pendingSaveFile != null) {
+                pendingSaveFile.delete();
+                pendingSaveFile = null;
+                pendingSaveName = null;
+            }
+            return;
+        }
+
+        if (r == REQ_SCAN) {
+            if (cameraOutputUri != null) {
+                scanUris.add(cameraOutputUri);
+                cameraOutputUri = null;
+                cameraOutputFile = null;
+                askNextScanPage();
+            }
+            return;
+        }
+
+        if (r == REQ_CAMERA) {
+            if (cameraOutputUri != null) {
+                Intent imageIntent = new Intent();
+                imageIntent.setData(cameraOutputUri);
+                imagePdf(imageIntent);
+            }
+            cameraOutputUri = null;
+            cameraOutputFile = null;
+            return;
+        }
+
+        if (d == null) return;
 
         if (r == REQ_PDF && d.getData() != null) {
             Uri u = d.getData();
@@ -361,7 +400,7 @@ public class MainActivity extends Activity {
         } else if (r >= REQ_SPLIT + 20 && r <= REQ_SPLIT + 24 && d.getData() != null) {
             persistReadPermission(d, d.getData());
             handleAdvancedResult(r, d.getData());
-        } else if (r == REQ_SAVE_AS && pendingSaveFile != null) {
+        } else if (r == REQ_SAVE_AS && pendingSaveFile != null && d.getData() != null) {
             Uri target = d.getData();
             persistWritePermission(d, target);
             File source = pendingSaveFile;
@@ -727,15 +766,54 @@ public class MainActivity extends Activity {
         EditText pageInput=new EditText(this);pageInput.setHint("Nomor halaman, kosong = semua");pageInput.setInputType(InputType.TYPE_CLASS_NUMBER);
         new AlertDialog.Builder(this).setTitle("PDF → JPG").setMessage("Kosongkan untuk semua halaman. Kualitas 85%.")
           .setView(pageInput).setNegativeButton("Batal",null).setPositiveButton("Ekspor",(d,w)->{
-              String x=pageInput.getText().toString().trim();int p=x.isEmpty()?-1:Integer.parseInt(x)-1;exportPdfJpg(u,p);
+              String x=pageInput.getText().toString().trim();
+              int p=-1;
+              try {
+                  if(!x.isEmpty()) {
+                      p=Integer.parseInt(x)-1;
+                      if(p<0) throw new NumberFormatException();
+                  }
+                  exportPdfJpg(u,p);
+              } catch(NumberFormatException e) {
+                  toast("Nomor halaman tidak valid");
+              }
           }).show();
     }
     void exportPdfJpg(Uri u,int selected){
-        worker.execute(()->{File dir=new File(getCacheDir(),"pdfku-jpg-"+System.nanoTime());try{AdvancedPdfTools.pdfToJpg(this,u,dir,85,selected<0,Math.max(0,selected));File zip=zipDirectory(dir);runOnUiThread(()->requestShareFile(zip,"application/zip","PDF-ku-JPG.zip"));}catch(Exception e){runOnUiThread(()->toast("Gagal ekspor JPG: "+e.getMessage()));}});
+        worker.execute(()->{
+            File dir=new File(getCacheDir(),"pdfku-jpg-"+System.nanoTime());
+            File zip=null;
+            try{
+                AdvancedPdfTools.pdfToJpg(this,u,dir,85,selected<0,Math.max(0,selected));
+                zip=zipDirectory(dir);
+                File result=zip;
+                runOnUiThread(()->requestShareFile(result,"application/zip","PDF-ku-JPG.zip"));
+            }catch(Exception e){
+                if(zip!=null) zip.delete();
+                runOnUiThread(()->toast("Gagal ekspor JPG: "+e.getMessage()));
+            }finally{
+                deleteTree(dir);
+            }
+        });
     }
     File zipDirectory(File dir) throws Exception{
-        File zip=new File(getCacheDir(),"PDF-ku-JPG.zip");java.util.zip.ZipOutputStream z=new java.util.zip.ZipOutputStream(new FileOutputStream(zip));
-        File[] fs=dir.listFiles();if(fs!=null)for(File f:fs){java.util.zip.ZipEntry e=new java.util.zip.ZipEntry(f.getName());z.putNextEntry(e);try(InputStream in=new FileInputStream(f)){copy(in,z);}z.closeEntry();}z.close();return zip;
+        File zip=new File(getCacheDir(),"PDF-ku-JPG-"+System.nanoTime()+".zip");
+        try(java.util.zip.ZipOutputStream z=new java.util.zip.ZipOutputStream(new FileOutputStream(zip))){
+            File[] fs=dir.listFiles();
+            if(fs==null || fs.length==0) throw new IOException("Tidak ada JPG yang berhasil dibuat");
+            for(File f:fs){
+                java.util.zip.ZipEntry e=new java.util.zip.ZipEntry(f.getName());
+                z.putNextEntry(e);
+                try(InputStream in=new FileInputStream(f)){copy(in,z);}
+                z.closeEntry();
+            }
+        }
+        return zip;
+    }
+    void deleteTree(File f){
+        if(f==null)return;
+        if(f.isDirectory()){File[] a=f.listFiles();if(a!=null)for(File x:a)deleteTree(x);}
+        f.delete();
     }
     void requestShareFile(File f,String mime,String name){
         Uri u=FileProvider.getUriForFile(this,getPackageName()+".fileprovider",f);Intent i=new Intent(Intent.ACTION_SEND);i.setType(mime);i.putExtra(Intent.EXTRA_STREAM,u);i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);startActivity(Intent.createChooser(i,"Bagikan hasil"));
@@ -763,7 +841,22 @@ public class MainActivity extends Activity {
         if(openedUri==null){pickPdf();return;}
         EditText q=new EditText(this);q.setHint("Kata yang dicari");
         new AlertDialog.Builder(this).setTitle("Cari teks PDF").setView(q).setNegativeButton("Batal",null).setPositiveButton("Cari",(d,w)->{
-            worker.execute(()->{try{String text=AdvancedPdfTools.extractText(this,openedUri);String needle=q.getText().toString().trim();int count=0;for(String line:text.split("\\n"))if(line.toLowerCase(Locale.ROOT).contains(needle.toLowerCase(Locale.ROOT)))count++;String msg=needle.isEmpty()?"Teks kosong":("Ditemukan pada "+count+" baris.");runOnUiThread(()->new AlertDialog.Builder(this).setTitle("Hasil pencarian").setMessage(msg+"\n\n"+text.substring(0,Math.min(text.length(),5000))).setPositiveButton("OK",null).show());}catch(Exception e){runOnUiThread(()->toast("PDF tidak memiliki teks yang bisa dicari."));}});
+            String needle=q.getText().toString().trim();
+            if(needle.isEmpty()){toast("Masukkan kata yang ingin dicari");return;}
+            worker.execute(()->{
+                try{
+                    String text=AdvancedPdfTools.extractText(this,openedUri);
+                    int count=0;
+                    for(String line:text.split("\\n")){
+                        if(line.toLowerCase(Locale.ROOT).contains(needle.toLowerCase(Locale.ROOT))) count++;
+                    }
+                    String msg="Ditemukan pada "+count+" baris.";
+                    String preview=text.substring(0,Math.min(text.length(),5000));
+                    runOnUiThread(()->new AlertDialog.Builder(this).setTitle("Hasil pencarian").setMessage(msg+"\n\n"+preview).setPositiveButton("OK",null).show());
+                }catch(Exception e){
+                    runOnUiThread(()->toast("PDF tidak memiliki teks yang bisa dicari."));
+                }
+            });
         }).show();
     }
 
@@ -818,13 +911,19 @@ public class MainActivity extends Activity {
         new AlertDialog.Builder(this).setTitle("Tanda Tangan").setView(box).setNegativeButton("Batal",null).setPositiveButton("Tempel",(d,w)->stampSignature(sig)).show();
     }
     void stampSignature(Bitmap sig){
-        worker.execute(()->{File f=null;try{f=tempFile("signature");AdvancedPdfTools.addSignature(this,openedUri,f,page,sig,72,72,180,60);File r=f;runOnUiThread(()->requestSaveAs(r,"PDF-ku-signature.pdf"));}catch(Exception e){if(f!=null)f.delete();runOnUiThread(()->toast("Gagal menambahkan tanda tangan: "+e.getMessage()));}});
+        final Uri sourceUri=openedUri;
+        final int pageIndex=page;
+        worker.execute(()->{File f=null;try{f=tempFile("signature");AdvancedPdfTools.addSignature(this,sourceUri,f,pageIndex,sig,72,72,180,60);File r=f;runOnUiThread(()->requestSaveAs(r,"PDF-ku-signature.pdf"));}catch(Exception e){if(f!=null)f.delete();runOnUiThread(()->toast("Gagal menambahkan tanda tangan: "+e.getMessage()));}});
     }
     void annotationDialog(){
         if(openedUri==null){toast("Buka PDF terlebih dahulu");return;}
         EditText t=new EditText(this);t.setHint("Catatan");
-        new AlertDialog.Builder(this).setTitle("Anotasi halaman "+(page+1)).setView(t).setNegativeButton("Batal",null).setPositiveButton("Tambah",(d,w)->{
-            worker.execute(()->{File f=null;try{f=tempFile("annotation");AdvancedPdfTools.addTextAnnotation(this,openedUri,f,page,t.getText().toString());File r=f;runOnUiThread(()->requestSaveAs(r,"PDF-ku-annotation.pdf"));}catch(Exception e){if(f!=null)f.delete();runOnUiThread(()->toast("Gagal menambah anotasi: "+e.getMessage()));}});
+        final Uri sourceUri=openedUri;
+        final int pageIndex=page;
+        new AlertDialog.Builder(this).setTitle("Anotasi halaman "+(pageIndex+1)).setView(t).setNegativeButton("Batal",null).setPositiveButton("Tambah",(d,w)->{
+            String note=t.getText().toString().trim();
+            if(note.isEmpty()){toast("Catatan kosong");return;}
+            worker.execute(()->{File f=null;try{f=tempFile("annotation");AdvancedPdfTools.addTextAnnotation(this,sourceUri,f,pageIndex,note);File r=f;runOnUiThread(()->requestSaveAs(r,"PDF-ku-annotation.pdf"));}catch(Exception e){if(f!=null)f.delete();runOnUiThread(()->toast("Gagal menambah anotasi: "+e.getMessage()));}});
         }).show();
     }
 
