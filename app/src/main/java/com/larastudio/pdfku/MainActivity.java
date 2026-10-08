@@ -775,7 +775,7 @@ public class MainActivity extends Activity {
                 Map<Integer,Integer> rotations=new HashMap<>();
                 LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setPadding(dp(16),dp(4),dp(16),0);
                 LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL); box.addView(list);
-                Runnable refresh=()->{
+                final Runnable[] refresh=new Runnable[1]; refresh[0]=()->{
                     list.removeAllViews();
                     for(int pos=0;pos<order.size();pos++){
                         final int p=pos, original=order.get(pos);
@@ -789,7 +789,7 @@ public class MainActivity extends Activity {
                         row.addView(rot,new LinearLayout.LayoutParams(dp(42),dp(42)));
                         row.addView(del,new LinearLayout.LayoutParams(dp(42),dp(42)));
                         list.addView(row);
-                        up.setOnClickListener(v->{Collections.swap(order,p,p-1);refresh.run();});
+                        up.setOnClickListener(v->{Collections.swap(order,p,p-1);refresh[0].run();});
                         down.setOnClickListener(v->{Collections.swap(order,p,p+1);refresh.run();});
                         rot.setOnClickListener(v->{rotations.put(original,(rotations.containsKey(original)?rotations.get(original):0)+90);toast("Halaman diputar 90°");});
                         del.setOnClickListener(v->{order.remove(p);refresh.run();});
