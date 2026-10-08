@@ -407,13 +407,32 @@ public class MainActivity extends Activity {
 
     void tools() {
         shell("PDF Tools");
-        add("🔗  Gabung PDF", v -> pickMerge());
-        add("✂️  Split PDF", v -> pickSplit());
-        add("ℹ️  Tentang PDF-ku", v -> new AlertDialog.Builder(this)
+        TextView intro = tx("Alat untuk merapikan dan mengelola dokumen PDF.", 14);
+        intro.setTextColor(Color.rgb(148, 163, 184));
+        content.addView(intro);
+
+        Button merge = action("🔗", "Gabung PDF", "Satukan beberapa file menjadi satu");
+        Button split = action("✂", "Split PDF", "Ambil rentang halaman tertentu");
+        for (Button b : new Button[]{merge, split}) {
+            b.setBackground(bg(Color.rgb(15, 23, 42), 18));
+            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(78));
+            p.setMargins(0, dp(8), 0, 0);
+            content.addView(b, p);
+        }
+        merge.setOnClickListener(v -> pickMerge());
+        split.setOnClickListener(v -> pickSplit());
+
+        Button about = action("ⓘ", "Tentang PDF-ku", "Toolkit PDF offline-first dari Lara Studio");
+        about.setBackground(bg(Color.rgb(15, 23, 42), 18));
+        LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(-1, dp(72));
+        ap.setMargins(0, dp(22), 0, 0);
+        content.addView(about, ap);
+        about.setOnClickListener(v -> new AlertDialog.Builder(this)
                 .setTitle("PDF-ku 1.1")
-                .setMessage("Toolkit PDF offline-first dari Lara Studio. Merge dan Split memakai engine PDF native berbasis PDFBox.")
+                .setMessage("Toolkit PDF offline-first dari Lara Studio. Merge dan Split memakai engine PDFBox.")
                 .setPositiveButton("OK", null).show());
-        add("⌂  Kembali", v -> home());
+
+        add("←  Kembali", v -> home());
     }
 
     void pickMerge() {
@@ -690,15 +709,25 @@ public class MainActivity extends Activity {
     void recent() {
         shell("File Terakhir");
         if (recent.isEmpty()) {
-            content.addView(tx("Belum ada PDF yang dibuka.", 16));
+            TextView empty = tx("Belum ada PDF yang dibuka.\n\nFile yang kamu buka nanti akan muncul di sini.", 15);
+            empty.setTextColor(Color.rgb(148, 163, 184));
+            content.addView(empty);
         } else {
+            TextView label = tx("TERBARU", 11);
+            label.setTextColor(Color.rgb(96, 165, 250));
+            label.setTypeface(Typeface.DEFAULT_BOLD);
+            content.addView(label);
             for (Uri u : new ArrayList<>(recent)) {
                 Button b = bt("📄  " + displayName(u));
-                content.addView(b, new LinearLayout.LayoutParams(-1, dp(56)));
+                b.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
+                b.setBackground(bg(Color.rgb(15, 23, 42), 16));
+                LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(62));
+                p.setMargins(0, dp(7), 0, 0);
+                content.addView(b, p);
                 b.setOnClickListener(v -> open(u));
             }
         }
-        add("⌂  Kembali", v -> home());
+        add("←  Kembali", v -> home());
     }
 
     String displayName(Uri u) {
