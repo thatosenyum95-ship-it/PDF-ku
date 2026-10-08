@@ -28,7 +28,7 @@ import java.util.concurrent.Executors;
 import java.util.Collections;
 
 public class MainActivity extends Activity {
-    private static final int REQ_PDF = 1, REQ_IMG = 2, REQ_MERGE = 3, REQ_SPLIT = 4, REQ_SAVE_AS = 5, REQ_CAMERA = 6, REQ_SCAN = 7;
+    private static final int REQ_PDF = 1, REQ_IMG = 2, REQ_MERGE = 3, REQ_SPLIT = 4, REQ_SAVE_AS = 5, REQ_CAMERA = 6, REQ_SCAN = 7, REQ_IMG_ADD = 8, REQ_CAMERA_ADD = 9;
     private static final String PREFS = "pdfku_prefs";
     private static final String RECENT = "recent_uris";
 
@@ -42,6 +42,9 @@ public class MainActivity extends Activity {
     private Uri cameraOutputUri;
     private File cameraOutputFile;
     private final ArrayList<Uri> scanUris = new ArrayList<>();
+    private ArrayList<Uri> editingImageUris;
+    private Runnable editingRefresh;
+    private boolean editingScanMode;
     private boolean darkViewer = false;
     private final ArrayList<Uri> recent = new ArrayList<>();
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
@@ -354,6 +357,19 @@ public class MainActivity extends Activity {
             return;
         }
 
+        if (r == REQ_CAMERA_ADD) {
+            if (cameraOutputUri != null) {
+                Uri added = cameraOutputUri;
+                if (editingImageUris != null) {
+                    editingImageUris.add(added);
+                    if (editingRefresh != null) editingRefresh.run();
+                }
+            }
+            cameraOutputUri = null;
+            cameraOutputFile = null;
+            return;
+        }
+
         if (r == REQ_CAMERA) {
             if (cameraOutputUri != null) {
                 Intent imageIntent = new Intent();
@@ -366,6 +382,18 @@ public class MainActivity extends Activity {
         }
 
         if (d == null) return;
+
+        if (r == REQ_IMG_ADD) {
+            persistReadPermissions(d);
+            ArrayList<Uri> added = selectedUris(d);
+            if (editingImageUris != null && !added.isEmpty()) {
+                editingImageUris.addAll(added);
+                if (editingRefresh != null) editingRefresh.run();
+            } else if (added.isEmpty()) {
+                toast("Tidak ada gambar dipilih");
+            }
+            return;
+        }
 
         if (r == REQ_PDF && d.getData() != null) {
             Uri u = d.getData();
@@ -423,6 +451,147 @@ public class MainActivity extends Activity {
                 persistReadPermission(d, d.getData());
             }
         } catch (Exception ignored) {}
+    }
+
+    void pickMoreImage() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(20), 0, dp(20), 0);
+
+        Button camera = bt("📷  Kamera");
+        Button gallery = bt("🖼  Galeri");
+        camera.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
+        gallery.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
+        camera.setBackground(bg(Color.rgb(37, 99, 235), 16));
+        gallery.setBackground(bg(Color.rgb(30, 41, 59), 16));
+
+        box.addView(camera, new LinearLayout.LayoutParams(-1, dp(58)));
+        LinearLayout.LayoutParams gp = new LinearLayout.LayoutParams(-1, dp(58));
+        gp.setMargins(0, dp(10), 0, 0);
+        box.addView(gallery, gp);
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle(editingScanMode ? "Tambah halaman scan" : "Tambah gambar")
+                .setMessage("Tambahkan foto ke daftar yang sedang Anda atur.")
+                .setView(box)
+                .setNegativeButton("Batal", null)
+                .create();
+
+        camera.setOnClickListener(v -> {
+            dialog.dismiss();
+            captureImageForEditing();
+        });
+        gallery.setOnClickListener(v -> {
+            dialog.dismiss();
+            Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            i.setType("image/*");
+            i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+            i.addCategory(Intent.CATEGORY_OPENABLE);
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+            startActivityForResult(i, REQ_IMG_ADD);
+        });
+        dialog.show();
+    }
+
+    void captureImageForEditing() {
+        try {
+            File photo = File.createTempFile("pdfku-add-", ".jpg", getCacheDir());
+            cameraOutputFile = photo;
+            cameraOutputUri = FileProvider.getUriForFile(
+                    this, getPackageName() + ".fileprovider", photo);
+
+            Intent i = new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
+            i.putExtra(android.provider.MediaStore.EXTRA_OUTPUT, cameraOutputUri);
+            i.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+            if (getPackageManager().queryIntentActivities(
+                    i, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY).isEmpty()) {
+                photo.delete();
+                cameraOutputFile = null;
+                cameraOutputUri = null;
+                toast("Kamera tidak tersedia");
+                return;
+            }
+            startActivityForResult(i, REQ_CAMERA_ADD);
+        } catch (Exception e) {
+            if (cameraOutputFile != null) cameraOutputFile.delete();
+            cameraOutputFile = null;
+            cameraOutputUri = null;
+            toast("Tidak bisa membuka kamera");
+        }
+    }
+
+    Bitmap thumbnail(Uri uri, int maxSide) {
+        try {
+            BitmapFactory.Options o = new BitmapFactory.Options();
+            o.inJustDecodeBounds = true;
+            try (InputStream in = getContentResolver().openInputStream(uri)) {
+                if (in == null) return null;
+                BitmapFactory.decodeStream(in, null, o);
+            }
+            if (o.outWidth <= 0 || o.outHeight <= 0) return null;
+
+            int sample = 1;
+            while (o.outWidth / sample > maxSide * 2 || o.outHeight / sample > maxSide * 2) {
+                sample *= 2;
+            }
+
+            BitmapFactory.Options real = new BitmapFactory.Options();
+            real.inSampleSize = sample;
+            real.inPreferredConfig = Bitmap.Config.RGB_565;
+            Bitmap b;
+            try (InputStream in = getContentResolver().openInputStream(uri)) {
+                if (in == null) return null;
+                b = BitmapFactory.decodeStream(in, null, real);
+            }
+            if (b == null) return null;
+
+            int orientation = ExifInterface.ORIENTATION_NORMAL;
+            try (ParcelFileDescriptor pfd = getContentResolver().openFileDescriptor(uri, "r")) {
+                if (pfd != null) {
+                    ExifInterface exif = new ExifInterface(pfd.getFileDescriptor());
+                    orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
+                }
+            }
+
+            Matrix m = new Matrix();
+            switch (orientation) {
+                case ExifInterface.ORIENTATION_FLIP_HORIZONTAL: m.setScale(-1, 1); break;
+                case ExifInterface.ORIENTATION_ROTATE_180: m.setRotate(180); break;
+                case ExifInterface.ORIENTATION_FLIP_VERTICAL: m.setScale(1, -1); break;
+                case ExifInterface.ORIENTATION_TRANSPOSE: m.setRotate(90); m.postScale(-1, 1); break;
+                case ExifInterface.ORIENTATION_ROTATE_90: m.setRotate(90); break;
+                case ExifInterface.ORIENTATION_TRANSVERSE: m.setRotate(-90); m.postScale(-1, 1); break;
+                case ExifInterface.ORIENTATION_ROTATE_270: m.setRotate(-90); break;
+            }
+            if (!m.isIdentity()) {
+                Bitmap fixed = Bitmap.createBitmap(b, 0, 0, b.getWidth(), b.getHeight(), m, true);
+                if (fixed != b) b.recycle();
+                b = fixed;
+            }
+
+            float scale = Math.min(1f, Math.min((float) maxSide / b.getWidth(), (float) maxSide / b.getHeight()));
+            if (scale < 1f) {
+                int w = Math.max(1, Math.round(b.getWidth() * scale));
+                int h = Math.max(1, Math.round(b.getHeight() * scale));
+                Bitmap small = Bitmap.createScaledBitmap(b, w, h, true);
+                if (small != b) b.recycle();
+                b = small;
+            }
+            return b;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    void showImagePreview(ImageView target, Uri uri) {
+        target.setImageResource(android.R.drawable.ic_menu_gallery);
+        worker.execute(() -> {
+            Bitmap b = thumbnail(uri, dp(58));
+            runOnUiThread(() -> {
+                if (b != null && target.getWindowToken() != null) target.setImageBitmap(b);
+            });
+        });
     }
 
     void open(Uri u) {
@@ -594,61 +763,65 @@ public class MainActivity extends Activity {
     }
 
     void showImageOrderDialog(ArrayList<Uri> items, boolean scanMode) {
-        final ArrayList<Uri> work = new ArrayList<>(items);
+        editingImageUris = new ArrayList<>(items);
+        editingScanMode = scanMode;
 
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(16), dp(4), dp(16), dp(8));
 
         TextView info = new TextView(this);
-        info.setText("Urutan halaman • foto akan diputar sesuai EXIF.");
+        info.setText("Atur foto sesuai keinginan Anda. Tahan urutan dengan ↑ ↓, hapus dengan ×, atau tambahkan foto baru.");
         info.setTextSize(13);
         info.setTextColor(Color.rgb(100, 116, 139));
         info.setPadding(0, 0, 0, dp(8));
         box.addView(info);
 
+        ScrollView listScroll = new ScrollView(this);
+        listScroll.setFillViewport(false);
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
-        box.addView(list, new LinearLayout.LayoutParams(-1, -2));
+        listScroll.addView(list);
+        box.addView(listScroll, new LinearLayout.LayoutParams(-1, dp(360)));
 
-        final CheckBox gray = new CheckBox(this);
+        Button add = bt("＋  Tambah " + (scanMode ? "Foto / Halaman" : "Gambar"));
+        add.setTextSize(15);
+        add.setBackground(bg(Color.rgb(15, 118, 110), 14));
+        add.setContentDescription("Tambah gambar");
+        LinearLayout.LayoutParams addLp = new LinearLayout.LayoutParams(-1, dp(54));
+        addLp.setMargins(0, dp(8), 0, dp(4));
+        box.addView(add, addLp);
+
+        CheckBox gray = new CheckBox(this);
         gray.setText("Scan hitam-putih / grayscale");
         gray.setTextSize(14);
         gray.setTextColor(Color.rgb(15, 23, 42));
-        gray.setButtonTintList(android.content.res.ColorStateList.valueOf(Color.rgb(15, 118, 110)));
-        gray.setPadding(0, 0, 0, 0);
 
-        final CheckBox crop = new CheckBox(this);
+        CheckBox crop = new CheckBox(this);
         crop.setText("Auto-crop tepi dokumen");
         crop.setTextSize(14);
         crop.setTextColor(Color.rgb(15, 23, 42));
-        crop.setButtonTintList(android.content.res.ColorStateList.valueOf(Color.rgb(15, 118, 110)));
-        crop.setPadding(0, 0, 0, 0);
 
-        LinearLayout options = new LinearLayout(this);
-        options.setOrientation(LinearLayout.VERTICAL);
-        options.setPadding(0, dp(8), 0, 0);
-        options.addView(gray, new LinearLayout.LayoutParams(-1, dp(48)));
-        options.addView(crop, new LinearLayout.LayoutParams(-1, dp(48)));
-        box.addView(options);
+        box.addView(gray, new LinearLayout.LayoutParams(-1, dp(46)));
+        box.addView(crop, new LinearLayout.LayoutParams(-1, dp(46)));
 
         final Runnable[] refresh = new Runnable[1];
         refresh[0] = () -> {
             list.removeAllViews();
 
-            if (work.isEmpty()) {
+            if (editingImageUris.isEmpty()) {
                 TextView empty = new TextView(this);
-                empty.setText("Belum ada gambar. Tambahkan gambar terlebih dahulu.");
+                empty.setText("Belum ada gambar. Tekan “Tambah " + (scanMode ? "Foto / Halaman" : "Gambar") + "”.");
                 empty.setTextSize(14);
                 empty.setTextColor(Color.rgb(100, 116, 139));
-                empty.setGravity(Gravity.CENTER_VERTICAL);
-                empty.setPadding(dp(8), dp(10), dp(8), dp(10));
-                list.addView(empty, new LinearLayout.LayoutParams(-1, dp(54)));
+                empty.setGravity(Gravity.CENTER);
+                list.addView(empty, new LinearLayout.LayoutParams(-1, dp(90)));
                 return;
             }
 
-            for (int i = 0; i < work.size(); i++) {
+            for (int i = 0; i < editingImageUris.size(); i++) {
                 final int idx = i;
+                Uri uri = editingImageUris.get(i);
 
                 LinearLayout row = new LinearLayout(this);
                 row.setOrientation(LinearLayout.HORIZONTAL);
@@ -656,26 +829,34 @@ public class MainActivity extends Activity {
                 row.setPadding(dp(8), dp(5), dp(6), dp(5));
                 row.setBackground(bg(Color.rgb(241, 245, 249), 12));
 
+                ImageView thumb = new ImageView(this);
+                thumb.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                thumb.setBackground(bg(Color.WHITE, 8));
+                row.addView(thumb, new LinearLayout.LayoutParams(dp(58), dp(58)));
+                showImagePreview(thumb, uri);
+
                 TextView number = new TextView(this);
                 number.setText(String.valueOf(i + 1));
                 number.setTextSize(13);
                 number.setTextColor(Color.WHITE);
                 number.setGravity(Gravity.CENTER);
                 number.setBackground(bg(Color.rgb(37, 99, 235), 18));
-                row.addView(number, new LinearLayout.LayoutParams(dp(36), dp(36)));
+                LinearLayout.LayoutParams np = new LinearLayout.LayoutParams(dp(36), dp(36));
+                np.setMargins(dp(8), 0, 0, 0);
+                row.addView(number, np);
 
                 LinearLayout copy = new LinearLayout(this);
                 copy.setOrientation(LinearLayout.VERTICAL);
                 copy.setGravity(Gravity.CENTER_VERTICAL);
-                copy.setPadding(dp(10), 0, dp(6), 0);
+                copy.setPadding(dp(8), 0, dp(5), 0);
 
-                String display = displayName(work.get(i));
+                String display = displayName(uri);
                 if (display == null || display.trim().isEmpty()) display = "Gambar " + (i + 1);
 
                 TextView name = new TextView(this);
                 name.setText(display);
                 name.setTextColor(Color.rgb(15, 23, 42));
-                name.setTextSize(13);
+                name.setTextSize(12);
                 name.setSingleLine(true);
                 name.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
 
@@ -684,8 +865,8 @@ public class MainActivity extends Activity {
                 type.setTextColor(Color.rgb(100, 116, 139));
                 type.setTextSize(11);
 
-                copy.addView(name, new LinearLayout.LayoutParams(-1, dp(24)));
-                copy.addView(type, new LinearLayout.LayoutParams(-1, dp(20)));
+                copy.addView(name, new LinearLayout.LayoutParams(-1, dp(22)));
+                copy.addView(type, new LinearLayout.LayoutParams(-1, dp(18)));
                 row.addView(copy, new LinearLayout.LayoutParams(0, dp(50), 1f));
 
                 Button up = bt("↑");
@@ -695,7 +876,7 @@ public class MainActivity extends Activity {
                 down.setContentDescription("Turunkan halaman " + (i + 1));
                 del.setContentDescription("Hapus halaman " + (i + 1));
                 up.setEnabled(i > 0);
-                down.setEnabled(i < work.size() - 1);
+                down.setEnabled(i < editingImageUris.size() - 1);
 
                 row.addView(up, new LinearLayout.LayoutParams(dp(42), dp(42)));
                 LinearLayout.LayoutParams downLp = new LinearLayout.LayoutParams(dp(42), dp(42));
@@ -705,48 +886,60 @@ public class MainActivity extends Activity {
                 delLp.setMargins(dp(4), 0, 0, 0);
                 row.addView(del, delLp);
 
-                LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(-1, dp(60));
+                LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(-1, dp(70));
                 rowLp.setMargins(0, dp(4), 0, 0);
                 list.addView(row, rowLp);
 
                 up.setOnClickListener(v -> {
-                    Collections.swap(work, idx, idx - 1);
+                    Collections.swap(editingImageUris, idx, idx - 1);
                     refresh[0].run();
                 });
                 down.setOnClickListener(v -> {
-                    Collections.swap(work, idx, idx + 1);
+                    Collections.swap(editingImageUris, idx, idx + 1);
                     refresh[0].run();
                 });
                 del.setOnClickListener(v -> {
-                    work.remove(idx);
+                    editingImageUris.remove(idx);
                     refresh[0].run();
                 });
             }
         };
-        refresh[0].run();
+        editingRefresh = refresh[0];
 
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(true);
-        scroll.addView(box);
+        add.setOnClickListener(v -> pickMoreImage());
+        refresh[0].run();
 
         AlertDialog dlg = new AlertDialog.Builder(this)
                 .setTitle(scanMode ? "Scan Dokumen" : "JPG / Gambar → PDF")
-                .setView(scroll)
-                .setNegativeButton("Batal", null)
+                .setView(box)
+                .setNegativeButton("Batal", (di, w) -> {
+                    editingRefresh = null;
+                    editingImageUris = null;
+                })
                 .setPositiveButton("Buat PDF", (di, w) -> {
-                    if (work.isEmpty()) {
+                    ArrayList<Uri> result = new ArrayList<>(editingImageUris);
+                    editingRefresh = null;
+                    editingImageUris = null;
+                    if (result.isEmpty()) {
                         toast("Tambahkan minimal 1 gambar");
                         return;
                     }
-                    makeImagePdf(work, gray.isChecked(), crop.isChecked(), scanMode);
+                    makeImagePdf(result, gray.isChecked(), crop.isChecked(), scanMode);
                 })
                 .create();
 
+        dlg.setOnDismissListener(di -> {
+            if (editingImageUris != null) {
+                // Jangan menghapus daftar ketika dialog hanya tertutup sementara oleh pemilih gambar/kamera.
+                // State akan dibersihkan oleh tombol Batal/Buat PDF.
+            }
+        });
         dlg.show();
 
         if (dlg.getWindow() != null) {
             int screen = getResources().getDisplayMetrics().widthPixels;
-            dlg.getWindow().setLayout(Math.min(dp(560), screen - dp(24)), Math.min(dp(760), getResources().getDisplayMetrics().heightPixels - dp(120)));
+            dlg.getWindow().setLayout(Math.min(dp(620), screen - dp(24)),
+                    Math.min(dp(760), getResources().getDisplayMetrics().heightPixels - dp(100)));
         }
     }
 
