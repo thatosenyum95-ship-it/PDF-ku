@@ -28,7 +28,7 @@ import java.util.concurrent.Executors;
 import java.util.Collections;
 
 public class MainActivity extends Activity {
-    private static final int REQ_PDF = 1, REQ_IMG = 2, REQ_MERGE = 3, REQ_SPLIT = 4, REQ_SAVE_AS = 5, REQ_CAMERA = 6;
+    private static final int REQ_PDF = 1, REQ_IMG = 2, REQ_MERGE = 3, REQ_SPLIT = 4, REQ_SAVE_AS = 5, REQ_CAMERA = 6, REQ_SCAN = 7;
     private static final String PREFS = "pdfku_prefs";
     private static final String RECENT = "recent_uris";
 
@@ -40,6 +40,8 @@ public class MainActivity extends Activity {
     private int page = 0;
     private Uri openedUri;
     private Uri cameraOutputUri;
+    private final ArrayList<Uri> scanUris = new ArrayList<>();
+    private boolean darkViewer = false;
     private final ArrayList<Uri> recent = new ArrayList<>();
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
 
@@ -145,6 +147,7 @@ public class MainActivity extends Activity {
         super.onCreate(b);
         PDFBoxResourceLoader.init(getApplicationContext());
         loadRecent();
+        darkViewer = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean("dark_viewer", false);
         home();
     }
 
@@ -328,6 +331,12 @@ public class MainActivity extends Activity {
         } else if (r == REQ_IMG) {
             persistReadPermissions(d);
             imagePdf(d);
+        } else if (r == REQ_SCAN) {
+            if (cameraOutputUri != null) {
+                scanUris.add(cameraOutputUri);
+                cameraOutputUri = null;
+                askNextScanPage();
+            }
         } else if (r == REQ_CAMERA) {
             if (cameraOutputUri != null) {
                 Intent imageIntent = new Intent();
@@ -540,77 +549,240 @@ public class MainActivity extends Activity {
     }
 
     void imagePdf(Intent d) {
-        worker.execute(() -> {
-            File f = null;
-            try {
-                ArrayList<Uri> a = selectedUris(d);
-                if (a.isEmpty()) throw new IOException("Tidak ada gambar dipilih");
+        ArrayList<Uri> a = selectedUris(d);
+        if (a.isEmpty()) { toast("Tidak ada gambar dipilih"); return; }
+        showImageOrderDialog(a, false);
+    }
 
-                f = tempFile("images");
-                PdfDocument p = new PdfDocument();
-                int n = 1;
-                int validImages = 0;
+    void showImageOrderDialog(ArrayList<Uri> items, boolean scanMode) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(18), dp(4), dp(18), 0);
+        TextView info = tx("Urutan halaman • gambar akan diputar sesuai EXIF.", 13);
+        info.setTextColor(Color.rgb(148,163,184));
+        box.addView(info);
 
-                for (Uri u : a) {
-                    Bitmap b = BitmapFactory.decodeStream(getContentResolver().openInputStream(u));
-                    if (b == null) continue;
-                    validImages++;
-                    float s = Math.min(535f / b.getWidth(), 762f / b.getHeight());
-                    int w = Math.max(1, (int) (b.getWidth() * s));
-                    int h = Math.max(1, (int) (b.getHeight() * s));
-                    PdfDocument.Page z = p.startPage(new PdfDocument.PageInfo.Builder(595, 842, n++).create());
-                    z.getCanvas().drawBitmap(b, null,
-                            new RectF((595 - w) / 2f, (842 - h) / 2f, (595 + w) / 2f, (842 + h) / 2f),
-                            new Paint(Paint.ANTI_ALIAS_FLAG));
-                    p.finishPage(z);
-                    b.recycle();
-                }
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        box.addView(list);
+        final ArrayList<Uri> work = new ArrayList<>(items);
+        final Runnable[] refresh = new Runnable[1];
+        refresh[0] = () -> {
+            list.removeAllViews();
+            for (int i=0;i<work.size();i++) {
+                final int idx=i;
+                LinearLayout row=new LinearLayout(this);
+                row.setGravity(Gravity.CENTER_VERTICAL);
+                TextView name=tx((i+1)+". "+displayName(work.get(i)),14);
+                name.setTextColor(Color.WHITE);
+                row.addView(name,new LinearLayout.LayoutParams(0,dp(52),1));
+                Button up=bt("↑"), down=bt("↓"), del=bt("×");
+                up.setEnabled(i>0); down.setEnabled(i<work.size()-1);
+                row.addView(up,new LinearLayout.LayoutParams(dp(44),dp(44)));
+                row.addView(down,new LinearLayout.LayoutParams(dp(44),dp(44)));
+                row.addView(del,new LinearLayout.LayoutParams(dp(44),dp(44)));
+                list.addView(row);
+                up.setOnClickListener(v->{Collections.swap(work,idx,idx-1);refresh[0].run();});
+                down.setOnClickListener(v->{Collections.swap(work,idx,idx+1);refresh[0].run();});
+                del.setOnClickListener(v->{work.remove(idx);refresh[0].run();});
+            }
+        };
+        refresh[0].run();
 
-                if (validImages == 0) {
-                    p.close();
-                    throw new IOException("Format gambar tidak didukung atau gambar rusak");
-                }
+        final CheckBox gray=new CheckBox(this); gray.setText("Scan hitam-putih / grayscale"); gray.setTextColor(Color.WHITE);
+        final CheckBox crop=new CheckBox(this); crop.setText("Auto-crop tepi dokumen"); crop.setTextColor(Color.WHITE);
+        box.addView(gray); box.addView(crop);
 
-                try (FileOutputStream o = new FileOutputStream(f)) {
-                    p.writeTo(o);
-                }
-                p.close();
-                File result = f;
-                runOnUiThread(() -> requestSaveAs(result, "PDF-ku-gambar.pdf"));
-            } catch (Exception e) {
-                if (f != null) f.delete();
-                runOnUiThread(() -> toast("Gagal membuat PDF gambar: " + e.getMessage()));
+        AlertDialog dlg=new AlertDialog.Builder(this).setTitle(scanMode?"Scan Dokumen":"JPG / Gambar → PDF")
+                .setView(box).setNegativeButton("Batal",null)
+                .setPositiveButton("Buat PDF",(di,w)->{
+                    if(work.isEmpty()){toast("Tidak ada gambar");return;}
+                    makeImagePdf(work,gray.isChecked(),crop.isChecked(),scanMode);
+                }).create();
+        dlg.show();
+    }
+
+    void makeImagePdf(ArrayList<Uri> items, boolean gray, boolean crop, boolean scanMode) {
+        worker.execute(()->{
+            File f=null;
+            try{
+                f=tempFile(scanMode?"scan":"images");
+                AdvancedPdfTools.imagesToPdf(this,items,f,gray,crop);
+                File result=f;
+                runOnUiThread(()->requestSaveAs(result,scanMode?"PDF-ku-scan.pdf":"PDF-ku-gambar.pdf"));
+            }catch(Exception e){
+                if(f!=null)f.delete();
+                runOnUiThread(()->toast("Gagal membuat PDF: "+e.getMessage()));
             }
         });
     }
 
     void tools() {
         shell("PDF Tools");
-        TextView intro = tx("Alat untuk merapikan dan mengelola dokumen PDF.", 14);
-        intro.setTextColor(Color.rgb(148, 163, 184));
-        content.addView(intro);
+        TextView intro=tx("Toolkit PDF v1.3 • semua proses utama dilakukan di perangkat.",14);
+        intro.setTextColor(Color.rgb(148,163,184)); content.addView(intro);
 
-        LinearLayout merge = actionCard("🔗", "Gabung PDF", "Satukan beberapa file menjadi satu", Color.rgb(37, 99, 235));
-        LinearLayout split = actionCard("✂", "Split PDF", "Ambil rentang halaman tertentu", Color.rgb(245, 158, 11));
-        LinearLayout.LayoutParams mp = new LinearLayout.LayoutParams(-1, dp(82));
-        mp.setMargins(0, dp(10), 0, 0);
-        content.addView(merge, mp);
-        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1, dp(82));
-        sp.setMargins(0, dp(10), 0, 0);
-        content.addView(split, sp);
-        merge.setOnClickListener(v -> pickMerge());
-        split.setOnClickListener(v -> pickSplit());
+        addTool("🔗","Gabung PDF","Satukan beberapa file",v->pickMerge(),Color.rgb(37,99,235));
+        addTool("✂","Split PDF","Pisahkan rentang halaman",v->pickSplit(),Color.rgb(245,158,11));
+        addTool("↕","Atur Halaman","Urutkan, putar, hapus halaman",v->pickPageManager(),Color.rgb(14,165,233));
+        addTool("🗜","Kompres PDF","Kecilkan ukuran file",v->pickCompress(),Color.rgb(16,185,129));
+        addTool("🖼","PDF → JPG","Ekspor halaman sebagai gambar",v->pickPdfToJpg(),Color.rgb(168,85,247));
+        addTool("🔐","Password PDF","Enkripsi PDF dengan password",v->pickEncrypt(),Color.rgb(239,68,68));
+        addTool("💧","Watermark","Tambahkan watermark teks",v->pickWatermark(),Color.rgb(236,72,153));
+        addTool("🔎","Cari / Ekstrak Teks","Cari teks pada PDF",v->searchPdf(),Color.rgb(59,130,246));
+        addTool("✍","Tanda Tangan","Gambar dan tempel signature",v->signatureDialog(),Color.rgb(124,58,237));
+        addTool("📝","Anotasi","Tambahkan catatan pada halaman",v->annotationDialog(),Color.rgb(234,179,8));
+        addTool("🌙","Dark Mode Viewer",darkViewer?"Aktif • ketuk untuk matikan":"Nonaktif • ketuk untuk aktifkan",v->toggleDarkViewer(),Color.rgb(71,85,105));
 
-        LinearLayout about = actionCard("ⓘ", "Tentang PDF-ku", "Toolkit PDF offline-first dari Lara Studio", Color.rgb(100, 116, 139));
-        LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(-1, dp(76));
-        ap.setMargins(0, dp(24), 0, 0);
-        content.addView(about, ap);
-        about.setOnClickListener(v -> new AlertDialog.Builder(this)
-                .setTitle("PDF-ku 1.1")
-                .setMessage("Toolkit PDF offline-first dari Lara Studio. Merge dan Split memakai engine PDFBox.")
-                .setPositiveButton("OK", null).show());
+        LinearLayout about=actionCard("ⓘ","Tentang PDF-ku","Gratis • Lara Studio • v1.3.0",Color.rgb(100,116,139));
+        LinearLayout.LayoutParams ap=new LinearLayout.LayoutParams(-1,dp(76));ap.setMargins(0,dp(16),0,0);content.addView(about,ap);
+        about.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("PDF-ku 1.3.0")
+                .setMessage("PDF-ku gratis dari Lara Studio. Fitur utama bekerja offline dan file tetap di perangkat.")
+                .setPositiveButton("OK",null).show());
+        add("←  Kembali",v->home());
+    }
 
-        add("←  Kembali", v -> home());
+    void addTool(String icon,String title,String sub,View.OnClickListener click,int accent){
+        LinearLayout c=actionCard(icon,title,sub,accent);
+        LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,dp(72));p.setMargins(0,dp(6),0,0);
+        content.addView(c,p);c.setOnClickListener(click);
+    }
+
+    void startScan(){ scanUris.clear(); captureScanPage(); }
+    void captureScanPage(){
+        try{
+            File photo=File.createTempFile("pdfku-scan-",".jpg",getCacheDir());
+            cameraOutputUri=FileProvider.getUriForFile(this,getPackageName()+".fileprovider",photo);
+            Intent i=new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
+            i.putExtra(android.provider.MediaStore.EXTRA_OUTPUT,cameraOutputUri);
+            i.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION|Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            if(getPackageManager().queryIntentActivities(i,android.content.pm.PackageManager.MATCH_DEFAULT_ONLY).isEmpty()){toast("Kamera tidak tersedia");return;}
+            startActivityForResult(i,REQ_SCAN);
+        }catch(Exception e){toast("Tidak bisa membuka kamera scan");}
+    }
+    void askNextScanPage(){
+        new AlertDialog.Builder(this).setTitle("Scan berikutnya?")
+            .setMessage("Halaman tersimpan: "+scanUris.size())
+            .setNegativeButton("Selesai",(d,w)->showImageOrderDialog(new ArrayList<>(scanUris),true))
+            .setPositiveButton("Tambah halaman",(d,w)->captureScanPage()).show();
+    }
+
+    void pickPageManager(){
+        Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("application/pdf");i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);startActivityForResult(i,REQ_SPLIT+20);
+    }
+
+    void pickCompress(){
+        Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("application/pdf");i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);startActivityForResult(i,REQ_SPLIT+21);
+    }
+    void pickPdfToJpg(){
+        Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("application/pdf");i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);startActivityForResult(i,REQ_SPLIT+22);
+    }
+    void pickEncrypt(){
+        Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("application/pdf");i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);startActivityForResult(i,REQ_SPLIT+23);
+    }
+    void pickWatermark(){
+        Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("application/pdf");i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);startActivityForResult(i,REQ_SPLIT+24);
+    }
+
+    void handleAdvancedResult(int r, Uri u){
+        if(u==null)return;
+        if(r==REQ_SPLIT+20) showPageManager(u);
+        else if(r==REQ_SPLIT+21) showCompressDialog(u);
+        else if(r==REQ_SPLIT+22) showPdfToJpgDialog(u);
+        else if(r==REQ_SPLIT+23) showEncryptDialog(u);
+        else if(r==REQ_SPLIT+24) showWatermarkDialog(u);
+    }
+
+    void showCompressDialog(Uri u){
+        final String[] q={"Kecil • 55%","Seimbang • 70%","Kualitas • 82%"};
+        new AlertDialog.Builder(this).setTitle("Kompres PDF").setSingleChoiceItems(q,1,(d,w)->{})
+          .setNegativeButton("Batal",null).setPositiveButton("Kompres",(d,w)->compressPdf(u,1)).show();
+    }
+    void compressPdf(Uri u,int preset){
+        worker.execute(()->{File f=null;try{f=tempFile("compressed");AdvancedPdfTools.compressPdf(this,u,f,preset==0?55:preset==1?70:82,1);File r=f;runOnUiThread(()->requestSaveAs(r,"PDF-ku-compressed.pdf"));}catch(Exception e){if(f!=null)f.delete();runOnUiThread(()->toast("Gagal kompres: "+e.getMessage()));}});
+    }
+
+    void showPdfToJpgDialog(Uri u){
+        EditText pageInput=new EditText(this);pageInput.setHint("Nomor halaman, kosong = semua");pageInput.setInputType(InputType.TYPE_CLASS_NUMBER);
+        new AlertDialog.Builder(this).setTitle("PDF → JPG").setMessage("Kosongkan untuk semua halaman. Kualitas 85%.")
+          .setView(pageInput).setNegativeButton("Batal",null).setPositiveButton("Ekspor",(d,w)->{
+              String x=pageInput.getText().toString().trim();int p=x.isEmpty()?-1:Integer.parseInt(x)-1;exportPdfJpg(u,p);
+          }).show();
+    }
+    void exportPdfJpg(Uri u,int selected){
+        worker.execute(()->{File dir=new File(getCacheDir(),"pdfku-jpg-"+System.nanoTime());try{AdvancedPdfTools.pdfToJpg(this,u,dir,85,selected<0,Math.max(0,selected));File zip=zipDirectory(dir,"PDF-ku-JPG.zip");runOnUiThread(()->requestShareFile(zip,"application/zip","PDF-ku-JPG.zip"));}catch(Exception e){runOnUiThread(()->toast("Gagal ekspor JPG: "+e.getMessage()));}});
+    }
+    File zipDirectory(File dir) throws Exception{
+        File zip=new File(getCacheDir(),"PDF-ku-JPG.zip");java.util.zip.ZipOutputStream z=new java.util.zip.ZipOutputStream(new FileOutputStream(zip));
+        File[] fs=dir.listFiles();if(fs!=null)for(File f:fs){java.util.zip.ZipEntry e=new java.util.zip.ZipEntry(f.getName());z.putNextEntry(e);try(InputStream in=new FileInputStream(f)){copy(in,z);}z.closeEntry();}z.close();return zip;
+    }
+    void requestShareFile(File f,String mime,String name){
+        Uri u=FileProvider.getUriForFile(this,getPackageName()+".fileprovider",f);Intent i=new Intent(Intent.ACTION_SEND);i.setType(mime);i.putExtra(Intent.EXTRA_STREAM,u);i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);startActivity(Intent.createChooser(i,"Bagikan hasil"));
+    }
+
+    void showEncryptDialog(Uri u){
+        EditText p=new EditText(this);p.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);p.setHint("Password");
+        new AlertDialog.Builder(this).setTitle("Password PDF").setMessage("Password akan diterapkan pada salinan baru.")
+          .setView(p).setNegativeButton("Batal",null).setPositiveButton("Enkripsi",(d,w)->encryptPdf(u,p.getText().toString())).show();
+    }
+    void encryptPdf(Uri u,String password){
+        if(password.length()<4){toast("Password minimal 4 karakter");return;}
+        worker.execute(()->{File f=null;try{f=tempFile("encrypted");AdvancedPdfTools.encrypt(this,u,f,password);File r=f;runOnUiThread(()->requestSaveAs(r,"PDF-ku-protected.pdf"));}catch(Exception e){if(f!=null)f.delete();runOnUiThread(()->toast("Gagal mengenkripsi: "+e.getMessage()));}});
+    }
+    void showWatermarkDialog(Uri u){
+        EditText t=new EditText(this);t.setHint("Contoh: LARA STUDIO");
+        new AlertDialog.Builder(this).setTitle("Watermark PDF").setView(t).setNegativeButton("Batal",null).setPositiveButton("Tambahkan",(d,w)->watermarkPdf(u,t.getText().toString())).show();
+    }
+    void watermarkPdf(Uri u,String text){
+        if(text.trim().isEmpty()){toast("Teks watermark kosong");return;}
+        worker.execute(()->{File f=null;try{f=tempFile("watermark");AdvancedPdfTools.watermark(this,u,f,text,0.25f,28);File r=f;runOnUiThread(()->requestSaveAs(r,"PDF-ku-watermark.pdf"));}catch(Exception e){if(f!=null)f.delete();runOnUiThread(()->toast("Gagal watermark: "+e.getMessage()));}});
+    }
+
+    void searchPdf(){
+        if(openedUri==null){pickPdf();return;}
+        EditText q=new EditText(this);q.setHint("Kata yang dicari");
+        new AlertDialog.Builder(this).setTitle("Cari teks PDF").setView(q).setNegativeButton("Batal",null).setPositiveButton("Cari",(d,w)->{
+            worker.execute(()->{try{String text=AdvancedPdfTools.extractText(this,openedUri);String needle=q.getText().toString().trim();int count=0;for(String line:text.split("\\n"))if(line.toLowerCase(Locale.ROOT).contains(needle.toLowerCase(Locale.ROOT)))count++;String msg=needle.isEmpty()?"Teks kosong":("Ditemukan pada "+count+" baris.");runOnUiThread(()->new AlertDialog.Builder(this).setTitle("Hasil pencarian").setMessage(msg+"\n\n"+text.substring(0,Math.min(text.length(),5000))).setPositiveButton("OK",null).show());}catch(Exception e){runOnUiThread(()->toast("PDF tidak memiliki teks yang bisa dicari."));}});
+        }).show();
+    }
+
+    void showPageManager(Uri u){
+        worker.execute(()->{try{int n;try(InputStream in=getContentResolver().openInputStream(u);PDDocument d=PDDocument.load(in)){n=d.getNumberOfPages();}
+            ArrayList<String> pages=new ArrayList<>();for(int i=0;i<n;i++)pages.add("Halaman "+(i+1));
+            boolean[] checked=new boolean[n];
+            runOnUiThread(()->new AlertDialog.Builder(this).setTitle("Atur Halaman")
+                .setMultiChoiceItems(pages.toArray(new String[0]),checked,(d,w,c)->checked[w]=c)
+                .setMessage("Centang halaman yang ingin dihapus. Untuk reorder/rotate, gunakan fitur dasar ini lalu pilih proses berikutnya.")
+                .setNegativeButton("Batal",null).setPositiveButton("Simpan",(d,w)->{
+                    ArrayList<Integer> order=new ArrayList<>();Set<Integer> del=new HashSet<>();for(int i=0;i<n;i++){order.add(i);if(checked[i])del.add(i);}
+                    worker.execute(()->{File f=null;try{f=tempFile("pages");AdvancedPdfTools.reorderPages(this,u,f,order,del,new HashMap<>());File r=f;runOnUiThread(()->requestSaveAs(r,"PDF-ku-pages.pdf"));}catch(Exception e){if(f!=null)f.delete();runOnUiThread(()->toast("Gagal mengatur halaman: "+e.getMessage()));}});}).show());
+        }catch(Exception e){runOnUiThread(()->toast("Gagal membaca PDF"));}});
+    }
+
+    void toggleDarkViewer(){darkViewer=!darkViewer;getSharedPreferences(PREFS,MODE_PRIVATE).edit().putBoolean("dark_viewer",darkViewer).apply();toast(darkViewer?"Dark viewer aktif":"Dark viewer nonaktif");if(renderer!=null)viewer();else tools();}
+    void signatureDialog(){
+        if(openedUri==null){toast("Buka PDF terlebih dahulu");return;}
+        LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);
+        ImageView pad=new ImageView(this);pad.setBackgroundColor(Color.WHITE);Bitmap sig=Bitmap.createBitmap(900,300,Bitmap.Config.ARGB_8888);sig.eraseColor(Color.WHITE);pad.setImageBitmap(sig);
+        final Paint pen=new Paint(Paint.ANTI_ALIAS_FLAG);pen.setColor(Color.BLACK);pen.setStrokeWidth(8);final float[] last={-1,-1};
+        pad.setOnTouchListener((v,e)->{float x=e.getX()*900f/Math.max(1,pad.getWidth()),y=e.getY()*300f/Math.max(1,pad.getHeight());Canvas c=new Canvas(sig);if(e.getAction()==MotionEvent.ACTION_DOWN){last[0]=x;last[1]=y;}else if(e.getAction()==MotionEvent.ACTION_MOVE){c.drawLine(last[0],last[1],x,y,pen);last[0]=x;last[1]=y;pad.invalidate();}return true;});
+        box.addView(pad,new LinearLayout.LayoutParams(-1,dp(180)));
+        new AlertDialog.Builder(this).setTitle("Tanda Tangan").setView(box).setNegativeButton("Batal",null).setPositiveButton("Tempel",(d,w)->stampSignature(sig)).show();
+    }
+    void stampSignature(Bitmap sig){
+        worker.execute(()->{File f=null;try{f=tempFile("signature");AdvancedPdfTools.addSignature(this,openedUri,f,page,sig,72,72,180,60);File r=f;runOnUiThread(()->requestSaveAs(r,"PDF-ku-signature.pdf"));}catch(Exception e){if(f!=null)f.delete();runOnUiThread(()->toast("Gagal menambahkan tanda tangan: "+e.getMessage()));}});
+    }
+    void annotationDialog(){
+        if(openedUri==null){toast("Buka PDF terlebih dahulu");return;}
+        EditText t=new EditText(this);t.setHint("Catatan");
+        new AlertDialog.Builder(this).setTitle("Anotasi halaman "+(page+1)).setView(t).setNegativeButton("Batal",null).setPositiveButton("Tambah",(d,w)->{
+            worker.execute(()->{File f=null;try{f=tempFile("annotation");AdvancedPdfTools.addTextAnnotation(this,openedUri,f,page,t.getText().toString());File r=f;runOnUiThread(()->requestSaveAs(r,"PDF-ku-annotation.pdf"));}catch(Exception e){if(f!=null)f.delete();runOnUiThread(()->toast("Gagal menambah anotasi: "+e.getMessage()));}});
+        }).show();
     }
 
     void pickMerge() {
