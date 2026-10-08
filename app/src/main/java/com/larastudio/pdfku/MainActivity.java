@@ -10,6 +10,7 @@ import android.graphics.pdf.PdfRenderer;
 import android.graphics.pdf.PdfDocument;
 import android.net.Uri;
 import android.provider.OpenableColumns;
+import android.text.InputType;
 import android.view.*;
 import android.widget.*;
 import androidx.core.content.FileProvider;
@@ -751,16 +752,89 @@ public class MainActivity extends Activity {
 
     void shareUri(Uri u) {
         if (u == null) { toast("Tidak ada PDF yang dipilih"); return; }
-        try {
-            Intent i = new Intent(Intent.ACTION_SEND);
-            i.setType("application/pdf");
-            i.putExtra(Intent.EXTRA_STREAM, u);
-            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            startActivity(Intent.createChooser(i, "Bagikan PDF"));
-        } catch (Exception e) {
-            toast("Tidak ada aplikasi yang bisa membagikan PDF");
-        }
+
+        String currentName = displayName(u);
+        if (currentName == null || currentName.trim().isEmpty()) currentName = "Dokumen.pdf";
+        if (!currentName.toLowerCase(Locale.ROOT).endsWith(".pdf")) currentName += ".pdf";
+
+        final EditText input = new EditText(this);
+        input.setSingleLine(true);
+        input.setText(currentName.substring(0, currentName.length() - 4));
+        input.setSelectAllOnFocus(true);
+        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        input.setHint("Nama file");
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(20), 0, dp(20), 0);
+        box.addView(input, new LinearLayout.LayoutParams(-1, dp(52)));
+
+        new AlertDialog.Builder(this)
+                .setTitle("Nama file sebelum dibagikan")
+                .setMessage("Nama ini hanya untuk file yang dikirim. File asli tidak berubah.")
+                .setView(box)
+                .setNegativeButton("Batal", null)
+                .setPositiveButton("Bagikan", (dialog, which) -> shareRenamedPdf(u, input.getText().toString()))
+                .show();
+
+        input.requestFocus();
     }
+
+    String safePdfName(String name) {
+        if (name == null) return "Dokumen.pdf";
+        name = name.trim();
+        if (name.isEmpty()) name = "Dokumen";
+
+        if (name.toLowerCase(Locale.ROOT).endsWith(".pdf")) {
+            name = name.substring(0, name.length() - 4);
+        }
+
+        name = name.replaceAll("[\\/:*?"<>|\x00-\x1F]", "_");
+        name = name.replaceAll("\\s+", " ").trim();
+        if (name.isEmpty()) name = "Dokumen";
+        if (name.length() > 120) name = name.substring(0, 120).trim();
+
+        return name + ".pdf";
+    }
+
+    void shareRenamedPdf(Uri source, String requestedName) {
+        String fileName = safePdfName(requestedName);
+        File shareFile = new File(getCacheDir(), "share-" + System.currentTimeMillis() + "-" + fileName);
+
+        worker.execute(() -> {
+            try (InputStream in = getContentResolver().openInputStream(source);
+                 OutputStream out = new FileOutputStream(shareFile)) {
+
+                if (in == null) throw new IOException("Tidak bisa membaca PDF");
+                copy(in, out);
+
+                runOnUiThread(() -> {
+                    try {
+                        Uri shareUri = FileProvider.getUriForFile(
+                                this,
+                                getPackageName() + ".fileprovider",
+                                shareFile
+                        );
+
+                        Intent i = new Intent(Intent.ACTION_SEND);
+                        i.setType("application/pdf");
+                        i.putExtra(Intent.EXTRA_STREAM, shareUri);
+                        i.putExtra(Intent.EXTRA_TEXT, fileName);
+                        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        startActivity(Intent.createChooser(i, "Bagikan PDF"));
+                    } catch (Exception e) {
+                        shareFile.delete();
+                        toast("Gagal menyiapkan PDF untuk dibagikan");
+                    }
+                });
+            } catch (Exception e) {
+                if (shareFile.exists()) shareFile.delete();
+                runOnUiThread(() -> toast("Gagal menyiapkan PDF: " + e.getMessage()));
+            }
+        });
+    }
+
+
 
     ArrayList<Uri> selectedUris(Intent d) {
         ArrayList<Uri> a = new ArrayList<>();
