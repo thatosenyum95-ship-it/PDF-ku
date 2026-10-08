@@ -26,7 +26,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
-    private static final int REQ_PDF = 1, REQ_IMG = 2, REQ_MERGE = 3, REQ_SPLIT = 4, REQ_SAVE_AS = 5;
+    private static final int REQ_PDF = 1, REQ_IMG = 2, REQ_MERGE = 3, REQ_SPLIT = 4, REQ_SAVE_AS = 5, REQ_CAMERA = 6;
     private static final String PREFS = "pdfku_prefs";
     private static final String RECENT = "recent_uris";
 
@@ -37,6 +37,7 @@ public class MainActivity extends Activity {
     private ParcelFileDescriptor fd;
     private int page = 0;
     private Uri openedUri;
+    private Uri cameraOutputUri;
     private final ArrayList<Uri> recent = new ArrayList<>();
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
 
@@ -239,12 +240,77 @@ public class MainActivity extends Activity {
     }
 
     void pickImg() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(20), 0, dp(20), 0);
+
+        Button camera = bt("📷  Kamera");
+        Button gallery = bt("🖼  Galeri");
+        camera.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
+        gallery.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
+        camera.setBackground(bg(Color.rgb(37, 99, 235), 16));
+        gallery.setBackground(bg(Color.rgb(30, 41, 59), 16));
+
+        box.addView(camera, new LinearLayout.LayoutParams(-1, dp(58)));
+        LinearLayout.LayoutParams gp = new LinearLayout.LayoutParams(-1, dp(58));
+        gp.setMargins(0, dp(10), 0, 0);
+        box.addView(gallery, gp);
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("Tambahkan gambar")
+                .setMessage("Pilih foto dari kamera atau gambar yang sudah tersimpan.")
+                .setView(box)
+                .setNegativeButton("Batal", null)
+                .create();
+
+        camera.setOnClickListener(v -> {
+            dialog.dismiss();
+            captureImage();
+        });
+        gallery.setOnClickListener(v -> {
+            dialog.dismiss();
+            pickImageFromGallery();
+        });
+        dialog.show();
+    }
+
+    void pickImageFromGallery() {
         Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         i.setType("image/*");
         i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
         i.addCategory(Intent.CATEGORY_OPENABLE);
         i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
         startActivityForResult(i, REQ_IMG);
+    }
+
+    void captureImage() {
+        try {
+            File photo = File.createTempFile("pdfku-camera-", ".jpg", getCacheDir());
+            cameraOutputUri = FileProvider.getUriForFile(
+                    this,
+                    getPackageName() + ".fileprovider",
+                    photo
+            );
+
+            Intent i = new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
+            i.putExtra(android.provider.MediaStore.EXTRA_OUTPUT, cameraOutputUri);
+            i.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+            List<ResolveInfo> cameras = getPackageManager().queryIntentActivities(
+                    i, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY
+            );
+            if (cameras.isEmpty()) {
+                cameraOutputUri = null;
+                photo.delete();
+                toast("Aplikasi kamera tidak tersedia");
+                return;
+            }
+
+            startActivityForResult(i, REQ_CAMERA);
+        } catch (Exception e) {
+            cameraOutputUri = null;
+            toast("Tidak bisa membuka kamera");
+        }
     }
 
     @Override
@@ -260,6 +326,13 @@ public class MainActivity extends Activity {
         } else if (r == REQ_IMG) {
             persistReadPermissions(d);
             imagePdf(d);
+        } else if (r == REQ_CAMERA) {
+            if (cameraOutputUri != null) {
+                Intent imageIntent = new Intent();
+                imageIntent.setData(cameraOutputUri);
+                imagePdf(imageIntent);
+            }
+            cameraOutputUri = null;
         } else if (r == REQ_MERGE) {
             persistReadPermissions(d);
             mergeSelected(d);
