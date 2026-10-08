@@ -826,7 +826,58 @@ public class MainActivity extends Activity {
     void shareUri(Uri u) {
         if (u == null) { toast("Tidak ada PDF yang dipilih"); return; }
 
-        String currentName = displayName(u);
+        Intent probe = new Intent(Intent.ACTION_SEND);
+        probe.setType("application/pdf");
+
+        List<android.content.pm.ResolveInfo> apps =
+                getPackageManager().queryIntentActivities(probe, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY);
+
+        if (apps.isEmpty()) {
+            toast("Tidak ada aplikasi yang bisa menerima PDF");
+            return;
+        }
+
+        // Pilih aplikasi tujuan terlebih dahulu. Nama file ditentukan setelah aplikasi dipilih.
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.setPadding(dp(20), dp(4), dp(20), dp(4));
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("Kirim PDF dengan")
+                .setView(list)
+                .setNegativeButton("Batal", null)
+                .create();
+
+        Set<String> seenPackages = new HashSet<>();
+        for (android.content.pm.ResolveInfo info : apps) {
+            String packageName = info.activityInfo.packageName;
+            if (!seenPackages.add(packageName)) continue;
+
+            String label = info.loadLabel(getPackageManager()).toString();
+            Button appButton = bt(label);
+            appButton.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
+            appButton.setCompoundDrawablePadding(dp(12));
+            try {
+                Drawable icon = info.loadIcon(getPackageManager());
+                icon.setBounds(0, 0, dp(28), dp(28));
+                appButton.setCompoundDrawables(icon, null, null, null);
+            } catch (Exception ignored) {}
+
+            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(56));
+            p.setMargins(0, dp(4), 0, dp(4));
+            list.addView(appButton, p);
+
+            appButton.setOnClickListener(v -> {
+                dialog.dismiss();
+                showShareNameDialog(u, packageName);
+            });
+        }
+
+        dialog.show();
+    }
+
+    void showShareNameDialog(Uri source, String packageName) {
+        String currentName = displayName(source);
         if (currentName == null || currentName.trim().isEmpty()) currentName = "Dokumen.pdf";
         if (!currentName.toLowerCase(Locale.ROOT).endsWith(".pdf")) currentName += ".pdf";
 
@@ -843,11 +894,11 @@ public class MainActivity extends Activity {
         box.addView(input, new LinearLayout.LayoutParams(-1, dp(52)));
 
         new AlertDialog.Builder(this)
-                .setTitle("Nama file sebelum dibagikan")
-                .setMessage("Nama ini hanya untuk file yang dikirim. File asli tidak berubah.")
+                .setTitle("Nama PDF")
                 .setView(box)
                 .setNegativeButton("Batal", null)
-                .setPositiveButton("Bagikan", (dialog, which) -> shareRenamedPdf(u, input.getText().toString()))
+                .setPositiveButton("Kirim", (dialog, which) ->
+                        shareRenamedPdf(source, input.getText().toString(), packageName))
                 .show();
 
         input.requestFocus();
@@ -862,7 +913,7 @@ public class MainActivity extends Activity {
             name = name.substring(0, name.length() - 4);
         }
 
-        name = name.replaceAll("[\\/:*?\"<>|\\x00-\\x1F]", "_");
+        name = name.replaceAll("[\\\\/:*?\"<>|\\x00-\\x1F]", "_");
         name = name.replaceAll("\\s+", " ").trim();
         if (name.isEmpty()) name = "Dokumen";
         if (name.length() > 120) name = name.substring(0, 120).trim();
@@ -870,9 +921,10 @@ public class MainActivity extends Activity {
         return name + ".pdf";
     }
 
-    void shareRenamedPdf(Uri source, String requestedName) {
+    void shareRenamedPdf(Uri source, String requestedName, String packageName) {
         String fileName = safePdfName(requestedName);
-        File shareFile = new File(getCacheDir(), "share-" + System.currentTimeMillis() + "-" + fileName);
+        // Gunakan nama file PDF yang sebenarnya, tanpa prefix "share-..." atau nomor.
+        File shareFile = new File(getCacheDir(), fileName);
 
         worker.execute(() -> {
             try (InputStream in = getContentResolver().openInputStream(source);
@@ -891,12 +943,13 @@ public class MainActivity extends Activity {
 
                         Intent i = new Intent(Intent.ACTION_SEND);
                         i.setType("application/pdf");
+                        i.setPackage(packageName);
                         i.putExtra(Intent.EXTRA_STREAM, shareUri);
                         i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                        startActivity(Intent.createChooser(i, "Bagikan PDF"));
+                        startActivity(i);
                     } catch (Exception e) {
                         shareFile.delete();
-                        toast("Gagal menyiapkan PDF untuk dibagikan");
+                        toast("Gagal mengirim PDF");
                     }
                 });
             } catch (Exception e) {
@@ -905,7 +958,6 @@ public class MainActivity extends Activity {
             }
         });
     }
-
 
 
     ArrayList<Uri> selectedUris(Intent d) {
