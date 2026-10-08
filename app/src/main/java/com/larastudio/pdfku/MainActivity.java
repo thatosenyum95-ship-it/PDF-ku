@@ -596,24 +596,58 @@ public class MainActivity extends Activity {
     }
 
     void showImageOrderDialog(ArrayList<Uri> items, boolean scanMode) {
+        final ArrayList<Uri> work = new ArrayList<>(items);
+
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(18), dp(4), dp(18), 0);
+        box.setPadding(dp(16), dp(4), dp(16), dp(8));
 
-        TextView info = tx("Urutan halaman • gambar akan diputar sesuai EXIF.", 13);
+        TextView info = new TextView(this);
+        info.setText("Urutan halaman • foto akan diputar sesuai EXIF.");
+        info.setTextSize(13);
         info.setTextColor(Color.rgb(100, 116, 139));
-        info.setVisibility(View.VISIBLE);
-        box.addView(info, new LinearLayout.LayoutParams(-1, -2));
+        info.setPadding(0, 0, 0, dp(8));
+        box.addView(info);
 
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
         box.addView(list, new LinearLayout.LayoutParams(-1, -2));
 
-        final ArrayList<Uri> work = new ArrayList<>(items);
-        final Runnable[] refresh = new Runnable[1];
+        final CheckBox gray = new CheckBox(this);
+        gray.setText("Scan hitam-putih / grayscale");
+        gray.setTextSize(14);
+        gray.setTextColor(Color.rgb(15, 23, 42));
+        gray.setButtonTintList(android.content.res.ColorStateList.valueOf(Color.rgb(15, 118, 110)));
+        gray.setPadding(0, 0, 0, 0);
 
+        final CheckBox crop = new CheckBox(this);
+        crop.setText("Auto-crop tepi dokumen");
+        crop.setTextSize(14);
+        crop.setTextColor(Color.rgb(15, 23, 42));
+        crop.setButtonTintList(android.content.res.ColorStateList.valueOf(Color.rgb(15, 118, 110)));
+        crop.setPadding(0, 0, 0, 0);
+
+        LinearLayout options = new LinearLayout(this);
+        options.setOrientation(LinearLayout.VERTICAL);
+        options.setPadding(0, dp(8), 0, 0);
+        options.addView(gray, new LinearLayout.LayoutParams(-1, dp(48)));
+        options.addView(crop, new LinearLayout.LayoutParams(-1, dp(48)));
+        box.addView(options);
+
+        final Runnable[] refresh = new Runnable[1];
         refresh[0] = () -> {
             list.removeAllViews();
+
+            if (work.isEmpty()) {
+                TextView empty = new TextView(this);
+                empty.setText("Belum ada gambar. Tambahkan gambar terlebih dahulu.");
+                empty.setTextSize(14);
+                empty.setTextColor(Color.rgb(100, 116, 139));
+                empty.setGravity(Gravity.CENTER_VERTICAL);
+                empty.setPadding(dp(8), dp(10), dp(8), dp(10));
+                list.addView(empty, new LinearLayout.LayoutParams(-1, dp(54)));
+                return;
+            }
 
             for (int i = 0; i < work.size(); i++) {
                 final int idx = i;
@@ -621,53 +655,59 @@ public class MainActivity extends Activity {
                 LinearLayout row = new LinearLayout(this);
                 row.setOrientation(LinearLayout.HORIZONTAL);
                 row.setGravity(Gravity.CENTER_VERTICAL);
-                row.setPadding(0, dp(4), 0, dp(4));
-                row.setBackground(bg(Color.rgb(241, 245, 249), 10));
+                row.setPadding(dp(8), dp(5), dp(6), dp(5));
+                row.setBackground(bg(Color.rgb(241, 245, 249), 12));
+
+                TextView number = new TextView(this);
+                number.setText(String.valueOf(i + 1));
+                number.setTextSize(13);
+                number.setTextColor(Color.WHITE);
+                number.setGravity(Gravity.CENTER);
+                number.setBackground(bg(Color.rgb(37, 99, 235), 18));
+                row.addView(number, new LinearLayout.LayoutParams(dp(36), dp(36)));
+
+                LinearLayout copy = new LinearLayout(this);
+                copy.setOrientation(LinearLayout.VERTICAL);
+                copy.setGravity(Gravity.CENTER_VERTICAL);
+                copy.setPadding(dp(10), 0, dp(6), 0);
 
                 String display = displayName(work.get(i));
-                if (display == null || display.trim().isEmpty()) {
-                    display = "Gambar " + (i + 1);
-                }
+                if (display == null || display.trim().isEmpty()) display = "Gambar " + (i + 1);
 
                 TextView name = new TextView(this);
-                name.setText((i + 1) + ". " + display);
+                name.setText(display);
                 name.setTextColor(Color.rgb(15, 23, 42));
-                name.setTextSize(14);
-                name.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
+                name.setTextSize(13);
                 name.setSingleLine(true);
-                name.setEllipsize(android.text.TextUtils.TruncateAt.END);
-                name.setIncludeFontPadding(true);
-                name.setVisibility(View.VISIBLE);
+                name.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
 
-                LinearLayout.LayoutParams nameLp =
-                        new LinearLayout.LayoutParams(0, dp(52), 1f);
-                nameLp.setMargins(dp(8), 0, dp(6), 0);
-                row.addView(name, nameLp);
+                TextView type = new TextView(this);
+                type.setText(scanMode ? "Hasil scan" : "Gambar");
+                type.setTextColor(Color.rgb(100, 116, 139));
+                type.setTextSize(11);
+
+                copy.addView(name, new LinearLayout.LayoutParams(-1, dp(24)));
+                copy.addView(type, new LinearLayout.LayoutParams(-1, dp(20)));
+                row.addView(copy, new LinearLayout.LayoutParams(0, dp(50), 1f));
 
                 Button up = bt("↑");
                 Button down = bt("↓");
                 Button del = bt("×");
-
                 up.setContentDescription("Naikkan halaman " + (i + 1));
                 down.setContentDescription("Turunkan halaman " + (i + 1));
                 del.setContentDescription("Hapus halaman " + (i + 1));
-
                 up.setEnabled(i > 0);
                 down.setEnabled(i < work.size() - 1);
 
-                row.addView(up, new LinearLayout.LayoutParams(dp(44), dp(44)));
-                LinearLayout.LayoutParams downLp =
-                        new LinearLayout.LayoutParams(dp(44), dp(44));
+                row.addView(up, new LinearLayout.LayoutParams(dp(42), dp(42)));
+                LinearLayout.LayoutParams downLp = new LinearLayout.LayoutParams(dp(42), dp(42));
                 downLp.setMargins(dp(4), 0, 0, 0);
                 row.addView(down, downLp);
-
-                LinearLayout.LayoutParams delLp =
-                        new LinearLayout.LayoutParams(dp(44), dp(44));
-                delLp.setMargins(dp(4), 0, dp(4), 0);
+                LinearLayout.LayoutParams delLp = new LinearLayout.LayoutParams(dp(42), dp(42));
+                delLp.setMargins(dp(4), 0, 0, 0);
                 row.addView(del, delLp);
 
-                LinearLayout.LayoutParams rowLp =
-                        new LinearLayout.LayoutParams(-1, dp(60));
+                LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(-1, dp(60));
                 rowLp.setMargins(0, dp(4), 0, 0);
                 list.addView(row, rowLp);
 
@@ -687,55 +727,17 @@ public class MainActivity extends Activity {
         };
         refresh[0].run();
 
-        final CheckBox gray = new CheckBox(this);
-        gray.setButtonTintList(android.content.res.ColorStateList.valueOf(Color.rgb(15, 118, 110)));
-        gray.setChecked(false);
-        gray.setVisibility(View.VISIBLE);
-
-        final CheckBox crop = new CheckBox(this);
-        crop.setButtonTintList(android.content.res.ColorStateList.valueOf(Color.rgb(15, 118, 110)));
-        crop.setChecked(false);
-        crop.setVisibility(View.VISIBLE);
-
-        LinearLayout options = new LinearLayout(this);
-        options.setOrientation(LinearLayout.VERTICAL);
-        options.setPadding(0, dp(8), 0, 0);
-
-        LinearLayout grayRow = new LinearLayout(this);
-        grayRow.setOrientation(LinearLayout.HORIZONTAL);
-        grayRow.setGravity(Gravity.CENTER_VERTICAL);
-        grayRow.setMinimumHeight(dp(48));
-        grayRow.addView(gray, new LinearLayout.LayoutParams(dp(48), dp(48)));
-
-        TextView grayLabel = tx("Scan hitam-putih / grayscale", 14);
-        grayLabel.setTextColor(Color.rgb(15, 23, 42));
-        grayLabel.setGravity(Gravity.CENTER_VERTICAL);
-        grayRow.addView(grayLabel, new LinearLayout.LayoutParams(0, dp(48), 1f));
-        grayRow.setOnClickListener(v -> gray.setChecked(!gray.isChecked()));
-        options.addView(grayRow);
-
-        LinearLayout cropRow = new LinearLayout(this);
-        cropRow.setOrientation(LinearLayout.HORIZONTAL);
-        cropRow.setGravity(Gravity.CENTER_VERTICAL);
-        cropRow.setMinimumHeight(dp(48));
-        cropRow.addView(crop, new LinearLayout.LayoutParams(dp(48), dp(48)));
-
-        TextView cropLabel = tx("Auto-crop tepi dokumen", 14);
-        cropLabel.setTextColor(Color.rgb(15, 23, 42));
-        cropLabel.setGravity(Gravity.CENTER_VERTICAL);
-        cropRow.addView(cropLabel, new LinearLayout.LayoutParams(0, dp(48), 1f));
-        cropRow.setOnClickListener(v -> crop.setChecked(!crop.isChecked()));
-        options.addView(cropRow);
-
-        box.addView(options, new LinearLayout.LayoutParams(-1, -2));
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.addView(box);
 
         AlertDialog dlg = new AlertDialog.Builder(this)
                 .setTitle(scanMode ? "Scan Dokumen" : "JPG / Gambar → PDF")
-                .setView(box)
+                .setView(scroll)
                 .setNegativeButton("Batal", null)
                 .setPositiveButton("Buat PDF", (di, w) -> {
                     if (work.isEmpty()) {
-                        toast("Tidak ada gambar");
+                        toast("Tambahkan minimal 1 gambar");
                         return;
                     }
                     makeImagePdf(work, gray.isChecked(), crop.isChecked(), scanMode);
@@ -744,10 +746,9 @@ public class MainActivity extends Activity {
 
         dlg.show();
 
-        // Pastikan konten custom tidak terukur terlalu sempit pada Android modern.
         if (dlg.getWindow() != null) {
             int screen = getResources().getDisplayMetrics().widthPixels;
-            dlg.getWindow().setLayout(Math.min(dp(520), screen - dp(32)), -2);
+            dlg.getWindow().setLayout(Math.min(dp(560), screen - dp(24)), Math.min(dp(760), getResources().getDisplayMetrics().heightPixels - dp(120)));
         }
     }
 
@@ -866,7 +867,20 @@ public class MainActivity extends Activity {
           .setNegativeButton("Batal",null).setPositiveButton("Kompres",(d,w)->compressPdf(u,selected[0])).show();
     }
     void compressPdf(Uri u,int preset){
-        worker.execute(()->{File f=null;try{f=tempFile("compressed");AdvancedPdfTools.compressPdf(this,u,f,preset==0?55:preset==1?70:82,1);File r=f;runOnUiThread(()->requestSaveAs(r,"PDF-ku-compressed.pdf"));}catch(Exception e){if(f!=null)f.delete();runOnUiThread(()->toast("Gagal kompres: "+e.getMessage()));}});
+        worker.execute(()->{
+            File f=null;
+            try{
+                f=tempFile("compressed");
+                int quality=preset==0?55:preset==1?70:82;
+                int scale=preset==0?70:preset==1?85:100;
+                AdvancedPdfTools.compressPdf(this,u,f,quality,scale);
+                File r=f;
+                runOnUiThread(()->requestSaveAs(r,"PDF-ku-compressed.pdf"));
+            }catch(Exception e){
+                if(f!=null)f.delete();
+                runOnUiThread(()->toast("Gagal kompres: "+e.getMessage()));
+            }
+        });
     }
 
     void showPdfToJpgDialog(Uri u){
@@ -996,7 +1010,9 @@ public class MainActivity extends Activity {
                         list.addView(row);
                         up.setOnClickListener(v->{Collections.swap(order,p,p-1);refresh[0].run();});
                         down.setOnClickListener(v->{Collections.swap(order,p,p+1);refresh[0].run();});
-                        rot.setOnClickListener(v->{rotations.put(original,(rotations.containsKey(original)?rotations.get(original):0)+90);toast("Halaman diputar 90°");});
+                        rot.setOnClickListener(v->{int next=((rotations.containsKey(original)?rotations.get(original):0)+90)%360;
+                                rotations.put(original,next);
+                                refresh[0].run();});
                         del.setOnClickListener(v->{order.remove(p);refresh[0].run();});
                     }
                 };
