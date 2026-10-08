@@ -1351,14 +1351,17 @@ public class MainActivity extends Activity {
 
     void shareRenamedPdf(Uri source, String requestedName, String packageName) {
         String fileName = safePdfName(requestedName);
-        File shareFile = new File(getCacheDir(), fileName);
+        File shareDir = new File(getCacheDir(), "share-" + System.nanoTime());
+        File shareFile = new File(shareDir, fileName);
 
         worker.execute(() -> {
-            try (InputStream in = getContentResolver().openInputStream(source);
-                 OutputStream out = new FileOutputStream(shareFile, false)) {
-
-                if (in == null) throw new IOException("Tidak bisa membaca PDF");
-                copy(in, out);
+            try {
+                if (!shareDir.mkdirs()) throw new IOException("Cache share tidak bisa dibuat");
+                try (InputStream in = getContentResolver().openInputStream(source);
+                     OutputStream out = new FileOutputStream(shareFile, false)) {
+                    if (in == null) throw new IOException("Tidak bisa membaca PDF");
+                    copy(in, out);
+                }
 
                 runOnUiThread(() -> {
                     try {
@@ -1375,12 +1378,12 @@ public class MainActivity extends Activity {
                         i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                         startActivity(i);
                     } catch (Exception e) {
-                        shareFile.delete();
+                        deleteTree(shareDir);
                         toast("Gagal menyiapkan PDF untuk dibagikan");
                     }
                 });
             } catch (Exception e) {
-                if (shareFile.exists()) shareFile.delete();
+                deleteTree(shareDir);
                 runOnUiThread(() -> toast("Gagal menyiapkan PDF: " + e.getMessage()));
             }
         });
