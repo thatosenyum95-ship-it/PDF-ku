@@ -377,19 +377,6 @@ public class MainActivity extends Activity {
         } else if (r == REQ_IMG) {
             persistReadPermissions(d);
             imagePdf(d);
-        } else if (r == REQ_SCAN) {
-            if (cameraOutputUri != null) {
-                scanUris.add(cameraOutputUri);
-                cameraOutputUri = null;
-                askNextScanPage();
-            }
-        } else if (r == REQ_CAMERA) {
-            if (cameraOutputUri != null) {
-                Intent imageIntent = new Intent();
-                imageIntent.setData(cameraOutputUri);
-                imagePdf(imageIntent);
-            }
-            cameraOutputUri = null;
         } else if (r == REQ_MERGE) {
             persistReadPermissions(d);
             mergeSelected(d);
@@ -710,9 +697,20 @@ public class MainActivity extends Activity {
             Intent i=new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
             i.putExtra(android.provider.MediaStore.EXTRA_OUTPUT,cameraOutputUri);
             i.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION|Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            if(getPackageManager().queryIntentActivities(i,android.content.pm.PackageManager.MATCH_DEFAULT_ONLY).isEmpty()){toast("Kamera tidak tersedia");return;}
+            if(getPackageManager().queryIntentActivities(i,android.content.pm.PackageManager.MATCH_DEFAULT_ONLY).isEmpty()){
+                if(cameraOutputFile!=null) cameraOutputFile.delete();
+                cameraOutputUri=null;
+                cameraOutputFile=null;
+                toast("Kamera tidak tersedia");
+                return;
+            }
             startActivityForResult(i,REQ_SCAN);
-        }catch(Exception e){toast("Tidak bisa membuka kamera scan");}
+        }catch(Exception e){
+            if(cameraOutputFile!=null) cameraOutputFile.delete();
+            cameraOutputUri=null;
+            cameraOutputFile=null;
+            toast("Tidak bisa membuka kamera scan");
+        }
     }
     void askNextScanPage(){
         new AlertDialog.Builder(this).setTitle("Scan berikutnya?")
