@@ -144,7 +144,8 @@ public final class AdvancedPdfTools {
             try{
                 for(int i=0;i<r.getPageCount();i++){
                     PdfRenderer.Page p=r.openPage(i);
-                    int w=Math.max(1,p.getWidth()*scale/2), h=Math.max(1,p.getHeight()*scale/2);
+                    int safeScale=Math.max(40,Math.min(100,scale));
+                    int w=Math.max(1,p.getWidth()*safeScale/100), h=Math.max(1,p.getHeight()*safeScale/100);
                     Bitmap b=Bitmap.createBitmap(w,h,Bitmap.Config.RGB_565); b.eraseColor(Color.WHITE);
                     p.render(b,null,null,PdfRenderer.Page.RENDER_MODE_FOR_PRINT); p.close();
                     File jpg=new File(dir,"p"+i+".jpg"); try(FileOutputStream os=new FileOutputStream(jpg)){b.compress(Bitmap.CompressFormat.JPEG,quality,os);}
