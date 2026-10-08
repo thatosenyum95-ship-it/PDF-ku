@@ -5,8 +5,6 @@ import android.graphics.*;
 import android.graphics.pdf.PdfDocument;
 import android.media.ExifInterface;
 import android.net.Uri;
-import android.os.Environment;
-
 import com.tom_roush.pdfbox.pdmodel.*;
 import com.tom_roush.pdfbox.pdmodel.common.PDRectangle;
 import com.tom_roush.pdfbox.pdmodel.encryption.AccessPermission;
@@ -16,6 +14,7 @@ import com.tom_roush.pdfbox.pdmodel.graphics.image.LosslessFactory;
 import com.tom_roush.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import com.tom_roush.pdfbox.pdmodel.interactive.annotation.PDAnnotationText;
 import com.tom_roush.pdfbox.pdmodel.interactive.annotation.PDAnnotation;
+import com.tom_roush.pdfbox.pdmodel.graphics.state.PDExtendedGraphicsState;
 import com.tom_roush.pdfbox.text.PDFTextStripper;
 
 import android.graphics.pdf.PdfRenderer;
@@ -109,6 +108,7 @@ public final class AdvancedPdfTools {
             int d=Math.abs(Color.red(c)-Color.red(bg))+Math.abs(Color.green(c)-Color.green(bg))+Math.abs(Color.blue(c)-Color.blue(bg));
             if(d>threshold){left=Math.min(left,x);top=Math.min(top,y);right=Math.max(right,x);bottom=Math.max(bottom,y);}
         }
+        if (right < 0 || bottom < 0 || left >= w || top >= h) return src;
         int pad=Math.max(8,Math.min(w,h)/40);
         left=Math.max(0,left-pad); top=Math.max(0,top-pad); right=Math.min(w-1,right+pad); bottom=Math.min(h-1,bottom+pad);
         if(right<=left || bottom<=top || (right-left)<w/3 || (bottom-top)<h/3) return src;
@@ -172,11 +172,21 @@ public final class AdvancedPdfTools {
     }
 
     public static void watermark(Context c, Uri uri, File out, String text, float opacity, int size) throws Exception {
+        float alpha=Math.max(0.05f,Math.min(1f,opacity));
         try(InputStream in=c.getContentResolver().openInputStream(uri); PDDocument doc=PDDocument.load(in)){
             for(PDPage page:doc.getPages()){
                 com.tom_roush.pdfbox.pdmodel.PDPageContentStream cs=new com.tom_roush.pdfbox.pdmodel.PDPageContentStream(doc,page,com.tom_roush.pdfbox.pdmodel.PDPageContentStream.AppendMode.APPEND,true,true);
-                cs.beginText(); cs.setFont(PDType1Font.HELVETICA_BOLD,size); cs.setNonStrokingColor(150,150,150);
-                PDRectangle b=page.getMediaBox(); cs.newLineAtOffset(b.getWidth()/2-size*text.length()/4f,b.getHeight()/2); cs.showText(text); cs.endText(); cs.close();
+                PDExtendedGraphicsState gs=new PDExtendedGraphicsState();
+                gs.setNonStrokingAlphaConstant(alpha);
+                cs.setGraphicsStateParameters(gs);
+                cs.beginText();
+                cs.setFont(PDType1Font.HELVETICA_BOLD,size);
+                cs.setNonStrokingColor(150,150,150);
+                PDRectangle b=page.getMediaBox();
+                cs.newLineAtOffset(b.getWidth()/2-size*text.length()/4f,b.getHeight()/2);
+                cs.showText(text);
+                cs.endText();
+                cs.close();
             }
             doc.save(out);
         }
