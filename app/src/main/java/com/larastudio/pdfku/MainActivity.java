@@ -605,7 +605,8 @@ public class MainActivity extends Activity {
 
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
-        box.addView(list);
+        list.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
+        box.addView(list, new LinearLayout.LayoutParams(-1, -2));
         final ArrayList<Uri> work = new ArrayList<>(items);
         final Runnable[] refresh = new Runnable[1];
         refresh[0] = () -> {
@@ -615,6 +616,7 @@ public class MainActivity extends Activity {
                 LinearLayout row=new LinearLayout(this);
                 row.setGravity(Gravity.CENTER_VERTICAL);
                 row.setPadding(0, dp(2), 0, dp(2));
+                row.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(56)));
 
                 TextView name=tx((i+1)+". "+displayName(work.get(i)),14);
                 name.setTextColor(Color.rgb(51,65,85));
@@ -890,12 +892,17 @@ public class MainActivity extends Activity {
                 ArrayList<Integer> order=new ArrayList<>(); for(int i=0;i<n;i++) order.add(i);
                 Map<Integer,Integer> rotations=new HashMap<>();
                 LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setPadding(dp(16),dp(4),dp(16),0);
-                LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL); box.addView(list);
+                LinearLayout list=new LinearLayout(this);
+                list.setOrientation(LinearLayout.VERTICAL);
+                list.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
+                box.addView(list,new LinearLayout.LayoutParams(-1,-2));
                 final Runnable[] refresh=new Runnable[1]; refresh[0]=()->{
                     list.removeAllViews();
                     for(int pos=0;pos<order.size();pos++){
                         final int p=pos, original=order.get(pos);
-                        LinearLayout row=new LinearLayout(this); row.setGravity(Gravity.CENTER_VERTICAL);
+                        LinearLayout row=new LinearLayout(this);
+                        row.setGravity(Gravity.CENTER_VERTICAL);
+                        row.setLayoutParams(new LinearLayout.LayoutParams(-1,dp(56)));
                         TextView name=tx("Halaman "+(original+1)+"  →  posisi "+(pos+1),14); name.setTextColor(Color.WHITE);
                         row.addView(name,new LinearLayout.LayoutParams(0,dp(52),1));
                         Button up=bt("↑"),down=bt("↓"),rot=bt("↻"),del=bt("×");
