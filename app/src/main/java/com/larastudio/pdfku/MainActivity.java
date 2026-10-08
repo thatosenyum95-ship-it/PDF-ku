@@ -819,7 +819,6 @@ public class MainActivity extends Activity {
                         Intent i = new Intent(Intent.ACTION_SEND);
                         i.setType("application/pdf");
                         i.putExtra(Intent.EXTRA_STREAM, shareUri);
-                        i.putExtra(Intent.EXTRA_TEXT, fileName);
                         i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                         startActivity(Intent.createChooser(i, "Bagikan PDF"));
                     } catch (Exception e) {
