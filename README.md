@@ -30,3 +30,10 @@ Workflow **Build PDF-ku APK** berjalan pada push ke `main` atau dapat dijalankan
 
 ## Catatan
 Fitur PDF yang membutuhkan manipulasi struktur internal seperti anotasi teks, bookmark, enkripsi password, kompresi tingkat lanjut, dan tanda tangan digital memerlukan modul PDF khusus dan direncanakan sebagai tahap lanjutan.
+
+
+## PDF-ku 1.3.0
+- Scan dokumen dengan multi-page, orientasi EXIF, auto-crop dan enhancement.
+- JPG/Gambar → PDF dan PDF → JPG.
+- Kompres, reorder/rotate/delete halaman, password, watermark.
+- Pencarian/ekstraksi teks, anotasi, signature, dan dark viewer.
