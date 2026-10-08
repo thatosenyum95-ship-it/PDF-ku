@@ -862,7 +862,7 @@ public class MainActivity extends Activity {
             name = name.substring(0, name.length() - 4);
         }
 
-        name = name.replaceAll("[\\/:*?"<>|\x00-\x1F]", "_");
+        name = name.replaceAll("[\\/:*?\"<>|\\x00-\\x1F]", "_");
         name = name.replaceAll("\\s+", " ").trim();
         if (name.isEmpty()) name = "Dokumen";
         if (name.length() > 120) name = name.substring(0, 120).trim();
