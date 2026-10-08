@@ -5,6 +5,7 @@ import android.os.*;
 import android.content.*;
 import android.database.Cursor;
 import android.graphics.*;
+import android.graphics.drawable.GradientDrawable;
 import android.graphics.pdf.PdfRenderer;
 import android.graphics.pdf.PdfDocument;
 import android.net.Uri;
@@ -49,15 +50,36 @@ public class MainActivity extends Activity {
         TextView t = new TextView(this);
         t.setText(s);
         t.setTextSize(z);
-        t.setTextColor(Color.WHITE);
-        t.setPadding(dp(12), dp(8), dp(12), dp(8));
+        t.setTextColor(Color.rgb(226, 232, 240));
+        t.setPadding(dp(4), dp(6), dp(4), dp(6));
         return t;
+    }
+
+    GradientDrawable bg(int color, float radius) {
+        GradientDrawable g = new GradientDrawable();
+        g.setColor(color);
+        g.setCornerRadius(dp((int) radius));
+        return g;
     }
 
     Button bt(String s) {
         Button b = new Button(this);
         b.setText(s);
         b.setAllCaps(false);
+        b.setTextSize(14);
+        b.setTextColor(Color.WHITE);
+        b.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        b.setPadding(dp(14), 0, dp(14), 0);
+        b.setMinHeight(0);
+        b.setMinWidth(0);
+        b.setBackground(bg(Color.rgb(30, 41, 59), 16));
+        return b;
+    }
+
+    Button action(String icon, String title, String subtitle) {
+        Button b = bt(icon + "  " + title + "\n" + subtitle);
+        b.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
+        b.setTextSize(15);
         return b;
     }
 
@@ -72,40 +94,79 @@ public class MainActivity extends Activity {
     void shell(String h) {
         LinearLayout r = new LinearLayout(this);
         r.setOrientation(LinearLayout.VERTICAL);
-        r.setPadding(dp(16), dp(16), dp(16), dp(10));
-        r.setBackgroundColor(Color.rgb(15, 23, 42));
+        r.setPadding(dp(20), dp(18), dp(20), dp(12));
+        r.setBackgroundColor(Color.rgb(8, 15, 29));
 
-        TextView t = tx(h, 28);
-        t.setTypeface(null, 1);
-        r.addView(t);
+        TextView t = tx(h, 27);
+        t.setTypeface(Typeface.create("sans-serif", Typeface.BOLD));
+        t.setTextColor(Color.WHITE);
+        r.addView(t, new LinearLayout.LayoutParams(-1, dp(54)));
 
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(0, dp(4), 0, dp(18));
 
         ScrollView sv = new ScrollView(this);
+        sv.setClipToPadding(false);
         sv.addView(content);
         r.addView(sv, new LinearLayout.LayoutParams(-1, 0, 1));
 
-        status = tx("PDF-ku • Semua urusan PDF, satu aplikasi.", 13);
+        status = tx("PDF-ku  •  Offline-first", 12);
+        status.setTextColor(Color.rgb(100, 116, 139));
         r.addView(status);
         setContentView(r);
     }
 
     void add(String s, View.OnClickListener l) {
         Button b = bt(s);
-        content.addView(b, new LinearLayout.LayoutParams(-1, dp(56)));
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(54));
+        p.setMargins(0, dp(6), 0, dp(6));
+        content.addView(b, p);
         b.setOnClickListener(l);
     }
 
     void home() {
         closePdf();
         shell("PDF-ku");
-        content.addView(tx("Baca • Buat • Kelola • Bagikan", 16));
-        add("📄  Buka PDF", v -> pickPdf());
-        add("🖼️  Gambar → PDF", v -> pickImg());
-        add("✍️  Teks → PDF", v -> textPdf());
-        add("🧰  PDF Tools", v -> tools());
-        add("🕘  File Terakhir", v -> recent());
+        TextView intro = tx("Baca, buat, kelola, dan bagikan PDF dengan cepat.", 15);
+        intro.setTextColor(Color.rgb(148, 163, 184));
+        content.addView(intro);
+
+        TextView label = tx("AKSI CEPAT", 11);
+        label.setTextColor(Color.rgb(96, 165, 250));
+        label.setTypeface(Typeface.DEFAULT_BOLD);
+        label.setPadding(0, dp(24), 0, dp(8));
+        content.addView(label);
+
+        Button open = action("📄", "Buka PDF", "Baca dokumen dari perangkat");
+        Button image = action("🖼", "Gambar → PDF", "Gabungkan foto menjadi dokumen");
+        Button text = action("✍", "Teks → PDF", "Buat PDF sederhana dari teks");
+        for (Button b : new Button[]{open, image, text}) {
+            b.setBackground(bg(Color.rgb(15, 23, 42), 18));
+            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(78));
+            p.setMargins(0, 0, 0, dp(10));
+            content.addView(b, p);
+        }
+        open.setOnClickListener(v -> pickPdf());
+        image.setOnClickListener(v -> pickImg());
+        text.setOnClickListener(v -> textPdf());
+
+        TextView toolsLabel = tx("ALAT PDF", 11);
+        toolsLabel.setTextColor(Color.rgb(96, 165, 250));
+        toolsLabel.setTypeface(Typeface.DEFAULT_BOLD);
+        toolsLabel.setPadding(0, dp(18), 0, dp(8));
+        content.addView(toolsLabel);
+
+        Button tools = action("🧰", "PDF Tools", "Merge, split, dan utilitas lainnya");
+        Button files = action("🕘", "File Terakhir", "Lanjutkan dokumen yang baru dibuka");
+        for (Button b : new Button[]{tools, files}) {
+            b.setBackground(bg(Color.rgb(15, 23, 42), 18));
+            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(72));
+            p.setMargins(0, 0, 0, dp(10));
+            content.addView(b, p);
+        }
+        tools.setOnClickListener(v -> tools());
+        files.setOnClickListener(v -> recent());
     }
 
     void pickPdf() {
