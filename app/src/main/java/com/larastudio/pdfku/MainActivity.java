@@ -832,34 +832,93 @@ public class MainActivity extends Activity {
 
     void makeText(String s) {
         if (s.trim().isEmpty()) { toast("Teks kosong"); return; }
+
         worker.execute(() -> {
             File f = null;
             try {
                 f = tempFile("text");
+
+                final int pageWidth = 595;   // A4 points
+                final int pageHeight = 842;  // A4 points
+                final float left = 50f;
+                final float right = 50f;
+                final float top = 55f;
+                final float bottom = 55f;
+                final float contentWidth = pageWidth - left - right;
+
                 PdfDocument d = new PdfDocument();
                 Paint x = new Paint(Paint.ANTI_ALIAS_FLAG);
                 x.setColor(Color.BLACK);
-                x.setTextSize(16);
-                float y = 60;
-                int pageNo = 1;
-                PdfDocument.Page p = d.startPage(new PdfDocument.PageInfo.Builder(595, 842, pageNo).create());
+                x.setTextSize(16f);
+                x.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
 
-                for (String line : s.split("\\n", -1)) {
-                    if (y > 800) {
-                        d.finishPage(p);
-                        pageNo++;
-                        p = d.startPage(new PdfDocument.PageInfo.Builder(595, 842, pageNo).create());
-                        y = 60;
+                float lineHeight = 25f;
+                float y = top;
+                int pageNo = 1;
+                PdfDocument.Page p = d.startPage(
+                        new PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNo).create()
+                );
+
+                String[] paragraphs = s.replace("\r", "").split("\n", -1);
+
+                for (String paragraph : paragraphs) {
+                    // Baris kosong tetap dipertahankan sebagai jarak antarparagraf.
+                    if (paragraph.trim().isEmpty()) {
+                        if (y + lineHeight > pageHeight - bottom) {
+                            d.finishPage(p);
+                            pageNo++;
+                            p = d.startPage(new PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNo).create());
+                            y = top;
+                        }
+                        y += lineHeight;
+                        continue;
                     }
-                    p.getCanvas().drawText(line, 40, y, x);
-                    y += 24;
+
+                    String remaining = paragraph.trim();
+
+                    while (!remaining.isEmpty()) {
+                        if (y + lineHeight > pageHeight - bottom) {
+                            d.finishPage(p);
+                            pageNo++;
+                            p = d.startPage(new PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNo).create());
+                            y = top;
+                        }
+
+                        int cut = remaining.length();
+
+                        // Cari batas kata yang masih muat di dalam lebar halaman.
+                        while (cut > 1 && x.measureText(remaining, 0, cut) > contentWidth) {
+                            int space = remaining.lastIndexOf(' ', cut - 1);
+                            if (space > 0) {
+                                cut = space;
+                            } else {
+                                cut--;
+                            }
+                        }
+
+                        String line = remaining.substring(0, cut).trim();
+
+                        // Untuk kata yang sangat panjang, pecah berdasarkan ukuran karakter.
+                        if (line.isEmpty()) {
+                            cut = Math.max(1, cut);
+                            line = remaining.substring(0, cut);
+                        }
+
+                        x.setTextAlign(Paint.Align.LEFT);
+                        p.getCanvas().drawText(line, left, y, x);
+                        y += lineHeight;
+
+                        remaining = remaining.substring(Math.min(cut, remaining.length())).trim();
+                    }
                 }
 
                 d.finishPage(p);
+
                 try (FileOutputStream o = new FileOutputStream(f)) {
                     d.writeTo(o);
                 }
                 d.close();
+
                 File result = f;
                 runOnUiThread(() -> requestSaveAs(result, "PDF-ku-text.pdf"));
             } catch (Exception e) {
