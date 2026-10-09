@@ -291,7 +291,7 @@ public class MainActivity extends Activity {
             bannerAd = null;
         }
         bannerAd = new AdView(this);
-        bannerAd.setAdUnitId("ca-app-pub-7709644999757064/1365296325");
+        bannerAd.setAdUnitId("ca-app-pub-3940256099942544/6300978111");
         int adWidthDp = (int) (getResources().getDisplayMetrics().widthPixels / getResources().getDisplayMetrics().density);
         bannerAd.setAdSize(AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(this, Math.max(1, adWidthDp - 40)));
         bannerAd.setAdListener(new AdListener() {
