@@ -17,6 +17,9 @@ import android.view.*;
 import android.widget.*;
 import androidx.core.content.FileProvider;
 import com.google.android.gms.ads.AdRequest;
+import com.google.android.gms.ads.AdListener;
+import com.google.android.gms.ads.LoadAdError;
+import android.util.Log;
 import com.google.android.gms.ads.AdSize;
 import com.google.android.gms.ads.AdView;
 import com.google.android.gms.ads.MobileAds;
@@ -289,13 +292,24 @@ public class MainActivity extends Activity {
         }
         bannerAd = new AdView(this);
         bannerAd.setAdUnitId("ca-app-pub-7709644999757064/1365296325");
-        bannerAd.setAdSize(AdSize.BANNER);
+        int adWidthDp = (int) (getResources().getDisplayMetrics().widthPixels / getResources().getDisplayMetrics().density);
+        bannerAd.setAdSize(AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(this, Math.max(1, adWidthDp - 40)));
+        bannerAd.setAdListener(new AdListener() {
+            @Override public void onAdLoaded() {
+                Log.d("PDFku-AdMob", "Banner berhasil dimuat");
+                if (bannerAd != null) bannerAd.setVisibility(View.VISIBLE);
+            }
+            @Override public void onAdFailedToLoad(LoadAdError error) {
+                Log.e("PDFku-AdMob", "Banner gagal dimuat: " + error.getCode() + " / " + error.getMessage());
+            }
+        });
+        bannerAd.setVisibility(View.VISIBLE);
         LinearLayout.LayoutParams adParams = new LinearLayout.LayoutParams(-1, -2);
         adParams.gravity = Gravity.CENTER_HORIZONTAL;
         r.addView(bannerAd, adParams);
-        bannerAd.loadAd(new AdRequest.Builder().build());
 
         setContentView(r);
+        bannerAd.loadAd(new AdRequest.Builder().build());
     }
 
     void add(String s, View.OnClickListener l) {
