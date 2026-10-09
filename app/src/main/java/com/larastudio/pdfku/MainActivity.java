@@ -16,6 +16,10 @@ import android.text.InputType;
 import android.view.*;
 import android.widget.*;
 import androidx.core.content.FileProvider;
+import com.google.android.gms.ads.AdRequest;
+import com.google.android.gms.ads.AdSize;
+import com.google.android.gms.ads.AdView;
+import com.google.android.gms.ads.MobileAds;
 
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader;
 import com.tom_roush.pdfbox.multipdf.PDFMergerUtility;
@@ -35,6 +39,7 @@ public class MainActivity extends Activity {
 
     private LinearLayout content;
     private TextView status;
+    private AdView bannerAd;
     private ImageView image;
     private PdfRenderer renderer;
     private ParcelFileDescriptor fd;
@@ -245,6 +250,7 @@ public class MainActivity extends Activity {
     public void onCreate(Bundle b) {
         super.onCreate(b);
         PDFBoxResourceLoader.init(getApplicationContext());
+        MobileAds.initialize(this, initializationStatus -> {});
         loadRecent();
         darkViewer = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean("dark_viewer", false);
         home();
@@ -276,6 +282,19 @@ public class MainActivity extends Activity {
         status = tx("PDF-ku  •  Offline-first", 12);
         status.setTextColor(Color.rgb(100, 116, 139));
         r.addView(status);
+
+        if (bannerAd != null) {
+            bannerAd.destroy();
+            bannerAd = null;
+        }
+        bannerAd = new AdView(this);
+        bannerAd.setAdUnitId("ca-app-pub-7709644999757064/1365296325");
+        bannerAd.setAdSize(AdSize.BANNER);
+        LinearLayout.LayoutParams adParams = new LinearLayout.LayoutParams(-1, -2);
+        adParams.gravity = Gravity.CENTER_HORIZONTAL;
+        r.addView(bannerAd, adParams);
+        bannerAd.loadAd(new AdRequest.Builder().build());
+
         setContentView(r);
     }
 
@@ -1862,6 +1881,7 @@ public class MainActivity extends Activity {
     protected void onDestroy() {
         worker.shutdownNow();
         closePdf();
+        if (bannerAd != null) { bannerAd.destroy(); bannerAd = null; }
         super.onDestroy();
     }
 }
