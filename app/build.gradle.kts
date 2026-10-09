@@ -18,6 +18,7 @@ android {
 
     dependencies {
         implementation("androidx.core:core:1.17.0")
+        implementation("com.google.android.gms:play-services-ads:25.5.0")
         implementation("com.tom-roush:pdfbox-android:2.0.27.0")
     }
 
